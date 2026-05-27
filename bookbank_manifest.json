@@ -1,0 +1,18 @@
+{
+  "name": "BookBank",
+  "short_name": "BookBank",
+  "description": "Read books, earn screen time.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#534AB7",
+  "theme_color": "#534AB7",
+  "icons": [
+    {
+      "src": "/icon-512.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

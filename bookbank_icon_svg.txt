@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- background -->
+  <rect width="512" height="512" rx="112" fill="#534AB7"/>
+
+  <!-- folded corner bookmark top right -->
+  <polygon points="284,0 512,0 512,228" fill="#F9C74F"/>
+  <polygon points="284,0 512,228 284,228" fill="#EF9F27" opacity="0.35"/>
+  <line x1="330" y1="0" x2="512" y2="182" stroke="#534AB7" stroke-width="8" opacity="0.3"/>
+  <line x1="376" y1="0" x2="512" y2="136" stroke="#534AB7" stroke-width="8" opacity="0.3"/>
+  <line x1="422" y1="0" x2="512" y2="90" stroke="#534AB7" stroke-width="8" opacity="0.3"/>
+
+  <!-- pig body -->
+  <circle cx="256" cy="320" r="160" fill="#EEEDFE"/>
+
+  <!-- pig head -->
+  <circle cx="256" cy="210" r="108" fill="#EEEDFE"/>
+
+  <!-- left ear -->
+  <ellipse cx="172" cy="130" rx="38" ry="52" fill="#CECBF6" transform="rotate(-10 172 130)"/>
+  <ellipse cx="172" cy="134" rx="22" ry="32" fill="#AFA9EC" transform="rotate(-10 172 134)"/>
+
+  <!-- right ear -->
+  <ellipse cx="340" cy="130" rx="38" ry="52" fill="#CECBF6" transform="rotate(10 340 130)"/>
+  <ellipse cx="340" cy="134" rx="22" ry="32" fill="#AFA9EC" transform="rotate(10 340 134)"/>
+
+  <!-- left eye -->
+  <circle cx="210" cy="196" r="26" fill="#fff"/>
+  <circle cx="215" cy="200" r="16" fill="#26215C"/>
+  <circle cx="220" cy="192" r="6" fill="#fff"/>
+
+  <!-- right eye -->
+  <circle cx="302" cy="196" r="26" fill="#fff"/>
+  <circle cx="307" cy="200" r="16" fill="#26215C"/>
+  <circle cx="312" cy="192" r="6" fill="#fff"/>
+
+  <!-- snout -->
+  <ellipse cx="256" cy="242" rx="60" ry="46" fill="#CECBF6"/>
+  <circle cx="232" cy="240" r="14" fill="#534AB7" opacity="0.3"/>
+  <circle cx="280" cy="240" r="14" fill="#534AB7" opacity="0.3"/>
+
+  <!-- smile -->
+  <path d="M220,268 Q256,292 292,268" fill="none" stroke="#AFA9EC" stroke-width="8" stroke-linecap="round"/>
+
+  <!-- coin slot -->
+  <rect x="210" y="102" width="92" height="24" rx="12" fill="#3C3489"/>
+
+  <!-- coin -->
+  <circle cx="256" cy="54" r="52" fill="#F9C74F"/>
+  <circle cx="256" cy="54" r="36" fill="none" stroke="#EF9F27" stroke-width="7"/>
+  <text x="256" y="72" text-anchor="middle" font-size="48" font-weight="700" fill="#7A5010" font-family="system-ui,sans-serif">$</text>
+
+  <!-- legs -->
+  <rect x="96" y="440" width="56" height="60" rx="28" fill="#CECBF6"/>
+  <rect x="168" y="450" width="56" height="60" rx="28" fill="#CECBF6"/>
+  <rect x="240" y="450" width="56" height="60" rx="28" fill="#CECBF6"/>
+  <rect x="312" y="440" width="56" height="60" rx="28" fill="#CECBF6"/>
+
+  <!-- tail -->
+  <path d="M416,300 Q468,264 458,320 Q448,362 490,348" fill="none" stroke="#CECBF6" stroke-width="14" stroke-linecap="round"/>
+</svg>
