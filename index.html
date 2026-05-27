@@ -256,28 +256,35 @@ function App() {
   if (screen==="home") return (
     <div style={{maxWidth:480,margin:"0 auto",padding:"2rem 1rem 1rem"}}>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:"1.75rem"}}>
-        <svg width="40" height="40" viewBox="0 0 512 512">
+        <svg width="40" height="40" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
           <rect width="512" height="512" rx="112" fill="#534AB7"/>
           <polygon points="284,0 512,0 512,228" fill="#F9C74F"/>
-          <circle cx="256" cy="310" r="140" fill="#EEEDFE"/>
-          <circle cx="256" cy="200" r="100" fill="#EEEDFE"/>
-          <ellipse cx="196" cy="170" rx="38" ry="44" fill="#CECBF6" transform="rotate(-10 196 170)"/>
-          <ellipse cx="196" cy="172" rx="22" ry="28" fill="#AFA9EC" transform="rotate(-10 196 172)"/>
-          <ellipse cx="316" cy="170" rx="38" ry="44" fill="#CECBF6" transform="rotate(10 316 170)"/>
-          <ellipse cx="316" cy="172" rx="22" ry="28" fill="#AFA9EC" transform="rotate(10 316 172)"/>
-          <circle cx="210" cy="196" r="22" fill="#fff"/>
-          <circle cx="215" cy="200" r="13" fill="#26215C"/>
-          <circle cx="220" cy="193" r="5" fill="#fff"/>
-          <circle cx="302" cy="196" r="22" fill="#fff"/>
-          <circle cx="307" cy="200" r="13" fill="#26215C"/>
-          <circle cx="312" cy="193" r="5" fill="#fff"/>
-          <ellipse cx="256" cy="238" rx="56" ry="42" fill="#CECBF6"/>
-          <circle cx="232" cy="236" r="12" fill="#534AB7" opacity="0.3"/>
-          <circle cx="280" cy="236" r="12" fill="#534AB7" opacity="0.3"/>
-          <rect x="216" y="108" width="80" height="20" rx="10" fill="#3C3489"/>
-          <circle cx="256" cy="56" r="48" fill="#F9C74F"/>
-          <circle cx="256" cy="56" r="33" fill="none" stroke="#EF9F27" stroke-width="7"/>
-          <text x="256" y="74" textAnchor="middle" fontSize="44" fontWeight="700" fill="#7A5010" fontFamily="system-ui">$</text>
+          <polygon points="284,0 512,228 284,228" fill="#EF9F27" opacity="0.35"/>
+          <circle cx="256" cy="320" r="160" fill="#EEEDFE"/>
+          <circle cx="256" cy="210" r="108" fill="#EEEDFE"/>
+          <ellipse cx="172" cy="130" rx="38" ry="52" fill="#CECBF6" transform="rotate(-10 172 130)"/>
+          <ellipse cx="172" cy="134" rx="22" ry="32" fill="#AFA9EC" transform="rotate(-10 172 134)"/>
+          <ellipse cx="340" cy="130" rx="38" ry="52" fill="#CECBF6" transform="rotate(10 340 130)"/>
+          <ellipse cx="340" cy="134" rx="22" ry="32" fill="#AFA9EC" transform="rotate(10 340 134)"/>
+          <circle cx="210" cy="196" r="26" fill="#fff"/>
+          <circle cx="215" cy="200" r="16" fill="#26215C"/>
+          <circle cx="220" cy="192" r="6" fill="#fff"/>
+          <circle cx="302" cy="196" r="26" fill="#fff"/>
+          <circle cx="307" cy="200" r="16" fill="#26215C"/>
+          <circle cx="312" cy="192" r="6" fill="#fff"/>
+          <ellipse cx="256" cy="242" rx="60" ry="46" fill="#CECBF6"/>
+          <circle cx="232" cy="240" r="14" fill="#534AB7" opacity="0.3"/>
+          <circle cx="280" cy="240" r="14" fill="#534AB7" opacity="0.3"/>
+          <path d="M220,268 Q256,292 292,268" fill="none" stroke="#AFA9EC" strokeWidth="8" strokeLinecap="round"/>
+          <rect x="210" y="102" width="92" height="24" rx="12" fill="#3C3489"/>
+          <circle cx="256" cy="54" r="52" fill="#F9C74F"/>
+          <circle cx="256" cy="54" r="36" fill="none" stroke="#EF9F27" strokeWidth="7"/>
+          <text x="256" y="72" textAnchor="middle" fontSize="48" fontWeight="700" fill="#7A5010" fontFamily="system-ui,sans-serif">$</text>
+          <rect x="96" y="440" width="56" height="60" rx="28" fill="#CECBF6"/>
+          <rect x="168" y="450" width="56" height="60" rx="28" fill="#CECBF6"/>
+          <rect x="240" y="450" width="56" height="60" rx="28" fill="#CECBF6"/>
+          <rect x="312" y="440" width="56" height="60" rx="28" fill="#CECBF6"/>
+          <path d="M416,300 Q468,264 458,320 Q448,362 490,348" fill="none" stroke="#CECBF6" strokeWidth="14" strokeLinecap="round"/>
         </svg>
         <div>
           <div style={{fontSize:11,color:"#888",letterSpacing:1,textTransform:"uppercase",fontWeight:600}}>BookBank</div>
