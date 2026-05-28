@@ -28,6 +28,7 @@ const DEFAULT_GIRLS = [
   { id:"g1", name:"Erin",   age:13, color:"#378ADD", light:"#E6F1FB", avatar:"E" },
   { id:"g2", name:"Rory",   age:11, color:"#7F77DD", light:"#EEEDFE", avatar:"R" },
   { id:"g3", name:"Weslie", age:7,  color:"#D4537E", light:"#FBEAF0", avatar:"W" },
+  { id:"g4", name:"Merrill", age:38, color:"#1D9E75", light:"#E1F5EE", avatar:"M" },
 ];
 
 const COLOR_OPTIONS = [
@@ -49,7 +50,11 @@ const DEFAULT_REWARDS = [
 ];
 
 function getMilestones(age, rewards) {
-  const t = age >= 13 ? [6,10,15,22,30] : age >= 11 ? [5,8,12,18,25] : [3,5,8,12,15];
+  const t = age >= 18
+    ? [4,8,13,20,28]
+    : age >= 13 ? [6,10,15,22,30]
+    : age >= 11 ? [5,8,12,18,25]
+    : [3,5,8,12,15];
   return t.map((books, i) => ({ books, reward: rewards[i] || rewards[rewards.length-1] }));
 }
 
@@ -373,7 +378,7 @@ function App() {
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                 <span style={{fontWeight:600,fontSize:16}}>{g.name}</span>
-                <span style={{fontSize:12,color:"#888"}}>age {g.age}</span>
+                {g.age < 18 && <span style={{fontSize:12,color:"#888"}}>age {g.age}</span>}
                 {!d.pin&&<span style={{fontSize:11,background:"#FFF3CD",color:"#856404",padding:"2px 8px",borderRadius:8,fontWeight:600}}>Set up PIN</span>}
                 {pending>0&&<span style={{fontSize:11,background:g.light,color:g.color,padding:"2px 8px",borderRadius:8,fontWeight:600}}>{pending} reward{pending>1?"s":""} ready!</span>}
                 {streak>1&&<span style={{fontSize:11,background:"#FFF8E1",color:"#B8860B",padding:"2px 8px",borderRadius:8,fontWeight:600}}>{streak} day streak 🔥</span>}
@@ -435,7 +440,7 @@ function App() {
           <div style={{width:40,height:40,borderRadius:"50%",background:girl.light,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,color:girl.color}}>{girl.avatar}</div>
           <div>
             <span style={{fontWeight:700,fontSize:17}}>{girl.name}</span>
-            <span style={{color:"#888",fontSize:13,marginLeft:6}}>age {girl.age}</span>
+            {girl.age < 18 && <span style={{color:"#888",fontSize:13,marginLeft:6}}>age {girl.age}</span>}
           </div>
           {gd.pendingRewards.length>0&&<span style={{marginLeft:"auto",background:girl.light,color:girl.color,fontSize:12,padding:"4px 12px",borderRadius:20,fontWeight:600}}>🎁 {gd.pendingRewards.length} ready!</span>}
         </div>
