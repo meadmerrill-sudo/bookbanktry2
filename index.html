@@ -88,6 +88,27 @@ const s = {
   label:{ fontSize:13, color:"#666", display:"block", marginBottom:5 },
 };
 
+function UpdateProgress({ book, gid, color, onUpdate }) {
+  const [open, setOpen] = useState(false);
+  const [val, setVal] = useState(book.pagesRead);
+  if (!open) return (
+    <button onClick={()=>setOpen(true)} style={{background:"transparent",border:`1px solid ${color}`,borderRadius:20,padding:"4px 12px",fontSize:12,color,cursor:"pointer",fontWeight:600}}>
+      Update pages
+    </button>
+  );
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+      <input type="number" min={0} max={book.pages} value={val} onChange={e=>setVal(parseInt(e.target.value)||0)}
+        style={{width:72,padding:"4px 8px",borderRadius:8,border:`1.5px solid ${color}`,fontSize:13,textAlign:"center"}}/>
+      <span style={{fontSize:12,color:"#888"}}>of {book.pages}</span>
+      <button onClick={()=>{onUpdate(gid,book.id,val);setOpen(false);}}
+        style={{background:color,border:"none",borderRadius:20,padding:"4px 12px",fontSize:12,color:"#fff",cursor:"pointer",fontWeight:600}}>Save</button>
+      <button onClick={()=>setOpen(false)}
+        style={{background:"none",border:"none",fontSize:12,color:"#888",cursor:"pointer"}}>Cancel</button>
+    </div>
+  );
+}
+
 function App() {
   const saved = load();
   const [girls, setGirls]           = useState(saved?.girls      || DEFAULT_GIRLS);
@@ -178,12 +199,35 @@ function App() {
 
   function doAddBook(gid) {
     if (!newBook.title.trim()) return;
-    const book = {...newBook, id:Date.now(), date:new Date().toLocaleDateString(), pages:parseInt(newBook.pages)||0, pagesRead:parseInt(newBook.pagesRead)||0};
-    const newCount = (data[gid].books?.length||0)+1;
+    const pages = parseInt(newBook.pages)||0;
+    const pagesRead = parseInt(newBook.pagesRead)||0;
+    const completed = pages > 0 && pagesRead >= pages;
+    const book = {...newBook, id:Date.now(), dateAdded:new Date().toLocaleDateString(), dateCompleted: completed ? new Date().toLocaleDateString() : null, pages, pagesRead, completed};
     save(gid, d => ({...d, books:[book,...d.books]}));
-    checkMilestones(gid, newCount);
+    if (completed) checkMilestones(gid, (data[gid].books?.length||0)+1);
     setNewBook({title:"",author:"",pages:"",pagesRead:"",rating:5,note:"",cover:""});
     setCoverResults([]); setCoverSearched(false); setAddBook(false);
+  }
+
+  function updateProgress(gid, bookId, pagesRead) {
+    setData(p => {
+      const books = p[gid].books.map(b => {
+        if (b.id !== bookId) return b;
+        const completed = b.pages > 0 && pagesRead >= b.pages;
+        const justCompleted = completed && !b.completed;
+        return {...b, pagesRead, completed, dateCompleted: justCompleted ? new Date().toLocaleDateString() : b.dateCompleted};
+      });
+      const newCompleted = books.filter(b=>b.completed).length;
+      return {...p, [gid]: {...p[gid], books}};
+    });
+    // check milestones after state updates
+    setTimeout(() => {
+      setData(p => {
+        const completedCount = p[gid].books.filter(b=>b.completed).length;
+        checkMilestones(gid, completedCount);
+        return p;
+      });
+    }, 50);
   }
 
   function checkMilestones(gid, count) {
@@ -279,7 +323,10 @@ function App() {
           <rect x="210" y="102" width="92" height="24" rx="12" fill="#3C3489"/>
           <circle cx="256" cy="54" r="52" fill="#F9C74F"/>
           <circle cx="256" cy="54" r="36" fill="none" stroke="#EF9F27" strokeWidth="7"/>
-          <text x="256" y="72" textAnchor="middle" fontSize="48" fontWeight="700" fill="#7A5010" fontFamily="system-ui,sans-serif">$</text>
+          {/* $ sign drawn as paths instead of text for cross-browser SVG compatibility */}
+          <path d="M256,28 L256,80" stroke="#7A5010" strokeWidth="6" strokeLinecap="round"/>
+          <path d="M244,38 Q232,38 232,50 Q232,62 256,62 Q280,62 280,74 Q280,86 256,86" fill="none" stroke="#7A5010" strokeWidth="6" strokeLinecap="round"/>
+          <path d="M268,38 Q280,38 280,50" fill="none" stroke="#7A5010" strokeWidth="6" strokeLinecap="round"/>
           <rect x="96" y="440" width="56" height="60" rx="28" fill="#CECBF6"/>
           <rect x="168" y="450" width="56" height="60" rx="28" fill="#CECBF6"/>
           <rect x="240" y="450" width="56" height="60" rx="28" fill="#CECBF6"/>
@@ -370,7 +417,7 @@ function App() {
         </div>
 
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:"1.25rem"}}>
-          {[["📱 Banked",`${gd.screenMinutes} min`],["📚 Books",gd.books.length],["🔥 Streak",streak?`${streak}d`:"—"]].map(([l,v])=>(
+          {[["📱 Banked",`${gd.screenMinutes} min`],["📚 Books",gd.books.filter(b=>b.completed).length],["🔥 Streak",streak?`${streak}d`:"—"]].map(([l,v])=>(
             <div key={l} style={{background:"#f5f5f7",borderRadius:10,padding:".75rem"}}>
               <div style={{fontSize:11,color:"#888",marginBottom:3}}>{l}</div>
               <div style={{fontSize:17,fontWeight:700}}>{v}</div>
@@ -406,23 +453,50 @@ function App() {
         </div>
 
         {gd.books.length===0&&<p style={{color:"#888",fontSize:14,textAlign:"center",padding:"2rem 0"}}>No books yet — add your first one!</p>}
-        {gd.books.map(book=>(
+        {gd.books.map(book=>{
+          const pct = book.pages>0 ? Math.min(100,Math.round((book.pagesRead/book.pages)*100)) : 0;
+          return (
           <div key={book.id} style={{...s.card,display:"flex",gap:12}}>
             {book.cover&&<img src={book.cover} alt={book.title} style={{width:52,borderRadius:6,objectFit:"cover",alignSelf:"flex-start",flexShrink:0}}/>}
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
                 <div style={{fontWeight:600,fontSize:15}}>{book.title}</div>
-                <div style={{display:"flex",gap:1,flexShrink:0}}>{[1,2,3,4,5].map(n=><span key={n} style={{color:n<=book.rating?girl.color:"#ddd",fontSize:13}}>★</span>)}</div>
+                {book.completed
+                  ? <span style={{fontSize:11,background:"#E1F5EE",color:"#1D9E75",padding:"2px 8px",borderRadius:8,fontWeight:600,flexShrink:0}}>✓ Done</span>
+                  : <span style={{fontSize:11,background:"#FFF8E1",color:"#B8860B",padding:"2px 8px",borderRadius:8,fontWeight:600,flexShrink:0}}>Reading...</span>
+                }
               </div>
               {book.author&&<div style={{fontSize:13,color:"#888"}}>{book.author}</div>}
-              <div style={{fontSize:12,color:"#aaa",margin:"3px 0"}}>{book.date}{book.pages>0?` · ${book.pagesRead}/${book.pages} pages`:""}</div>
-              {book.note&&<div style={{fontSize:13,color:"#888",fontStyle:"italic"}}>"{book.note}"</div>}
-              <button onClick={()=>startQuiz(book,girl)} style={{marginTop:8,background:"#f5f5f7",border:"1px solid #e0e0e0",borderRadius:20,padding:"4px 12px",fontSize:12,color:"#666",cursor:"pointer"}}>
-                🧠 Comprehension quiz
-              </button>
+              <div style={{fontSize:12,color:"#aaa",margin:"3px 0"}}>
+                Added {book.dateAdded}
+                {book.completed&&book.dateCompleted&&` · Finished ${book.dateCompleted}`}
+              </div>
+              {book.pages>0&&(
+                <div style={{margin:"6px 0"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#888",marginBottom:4}}>
+                    <span>{book.pagesRead} of {book.pages} pages</span>
+                    <span>{pct}%</span>
+                  </div>
+                  <div style={{height:6,background:"#f0f0f0",borderRadius:3,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:`${pct}%`,background:book.completed?"#1D9E75":girl.color,borderRadius:3,transition:"width .3s"}}/>
+                  </div>
+                </div>
+              )}
+              {book.note&&<div style={{fontSize:13,color:"#888",fontStyle:"italic",marginTop:3}}>"{book.note}"</div>}
+              <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
+                {!book.completed&&book.pages>0&&(
+                  <UpdateProgress book={book} gid={girl.id} color={girl.color} onUpdate={updateProgress}/>
+                )}
+                {(gd.timerLog&&gd.timerLog.length>0)&&(
+                  <button onClick={()=>startQuiz(book,girl)} style={{background:"#f5f5f7",border:"1px solid #e0e0e0",borderRadius:20,padding:"4px 12px",fontSize:12,color:"#666",cursor:"pointer"}}>
+                    🧠 Comprehension quiz
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        ))}
+          );
+        })}
 
         {addBook&&(
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",zIndex:200}}>
