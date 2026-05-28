@@ -365,6 +365,7 @@ function App() {
         <div>
           <div style={{fontSize:11,color:"#888",letterSpacing:1,textTransform:"uppercase",fontWeight:600}}>BookBank</div>
           <div style={{fontSize:20,fontWeight:700}}>Who's reading today?</div>
+          
         </div>
       </div>
       {girls.map(g => {
@@ -718,7 +719,7 @@ function App() {
         })}
 
         {parentTab==="settings"&&<div>
-          <p style={{fontWeight:700,fontSize:15,marginBottom:12}}>Girl profiles</p>
+          <p style={{fontWeight:700,fontSize:15,marginBottom:12}}>Profiles</p>
           {girls.map(g=><div key={g.id} style={{...s.card,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <div style={{width:38,height:38,borderRadius:"50%",background:g.light,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,color:g.color}}>{g.avatar}</div>
