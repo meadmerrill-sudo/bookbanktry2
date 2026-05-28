@@ -78,7 +78,7 @@ function initData() {
   }, {});
 }
 
-const QUIZ_SYS = `You are a reading comprehension quiz generator for children. Given a book title, age, and pages read, generate exactly 3 multiple-choice questions. Age 7: simple plot/characters. Age 11: plot, motivation, themes. Age 13: themes, inferences, development. Return ONLY valid JSON: {"questions":[{"q":"...","options":["A","B","C","D"],"answer":0}]}`;
+const QUIZ_SYS = `You are a reading comprehension quiz generator for children. You will be given a book title, the reader's age, and exactly which chapter they have read up to. You MUST only ask questions about events, characters, and plot points that occur in or before that chapter. Never ask about anything that happens after that chapter. Age 7: simple plot/characters. Age 11: plot, motivation, themes. Age 13: themes, inferences, development. Return ONLY valid JSON: {"questions":[{"q":"...","options":["A","B","C","D"],"answer":0}]}`;
 
 const s = {
   card: { background:"#fff", border:"0.5px solid rgba(0,0,0,0.1)", borderRadius:12, padding:"1rem 1.25rem", marginBottom:10 },
@@ -90,21 +90,35 @@ const s = {
 
 function UpdateProgress({ book, gid, color, onUpdate }) {
   const [open, setOpen] = useState(false);
-  const [val, setVal] = useState(book.pagesRead);
+  const [pages, setPages] = useState(book.pagesRead);
+  const [chapter, setChapter] = useState(book.chapterOn||1);
   if (!open) return (
     <button onClick={()=>setOpen(true)} style={{background:"transparent",border:`1px solid ${color}`,borderRadius:20,padding:"4px 12px",fontSize:12,color,cursor:"pointer",fontWeight:600}}>
-      Update pages
+      Update progress
     </button>
   );
   return (
-    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-      <input type="number" min={0} max={book.pages} value={val} onChange={e=>setVal(parseInt(e.target.value)||0)}
-        style={{width:72,padding:"4px 8px",borderRadius:8,border:`1.5px solid ${color}`,fontSize:13,textAlign:"center"}}/>
-      <span style={{fontSize:12,color:"#888"}}>of {book.pages}</span>
-      <button onClick={()=>{onUpdate(gid,book.id,val);setOpen(false);}}
-        style={{background:color,border:"none",borderRadius:20,padding:"4px 12px",fontSize:12,color:"#fff",cursor:"pointer",fontWeight:600}}>Save</button>
-      <button onClick={()=>setOpen(false)}
-        style={{background:"none",border:"none",fontSize:12,color:"#888",cursor:"pointer"}}>Cancel</button>
+    <div style={{background:"#f9f9f9",borderRadius:10,padding:"10px 12px",marginTop:4,width:"100%"}}>
+      <div style={{display:"flex",gap:12,marginBottom:8,flexWrap:"wrap"}}>
+        <div style={{flex:1,minWidth:80}}>
+          <div style={{fontSize:11,color:"#888",marginBottom:4}}>Pages read</div>
+          <input type="number" min={0} max={book.pages} value={pages} onChange={e=>setPages(parseInt(e.target.value)||0)}
+            style={{width:"100%",padding:"6px 8px",borderRadius:8,border:`1.5px solid ${color}`,fontSize:14,textAlign:"center"}}/>
+          <div style={{fontSize:10,color:"#aaa",textAlign:"center",marginTop:2}}>of {book.pages}</div>
+        </div>
+        <div style={{flex:1,minWidth:80}}>
+          <div style={{fontSize:11,color:"#888",marginBottom:4}}>Current chapter</div>
+          <input type="number" min={1} max={book.chapters||999} value={chapter} onChange={e=>setChapter(parseInt(e.target.value)||1)}
+            style={{width:"100%",padding:"6px 8px",borderRadius:8,border:`1.5px solid ${color}`,fontSize:14,textAlign:"center"}}/>
+          <div style={{fontSize:10,color:"#aaa",textAlign:"center",marginTop:2}}>of {book.chapters||"?"}</div>
+        </div>
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={()=>{onUpdate(gid,book.id,pages,chapter);setOpen(false);}}
+          style={{flex:1,background:color,border:"none",borderRadius:20,padding:"6px 0",fontSize:13,color:"#fff",cursor:"pointer",fontWeight:600}}>Save</button>
+        <button onClick={()=>setOpen(false)}
+          style={{flex:1,background:"none",border:"1px solid #e0e0e0",borderRadius:20,padding:"6px 0",fontSize:13,color:"#888",cursor:"pointer"}}>Cancel</button>
+      </div>
     </div>
   );
 }
@@ -169,17 +183,25 @@ function App() {
   function save(gid, fn) { setData(p => ({...p, [gid]: fn(p[gid])})); }
   function fmtTime(s) { return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`; }
 
-  function startTimer(gid) {
-    setTimerActive(p=>({...p,[gid]:true}));
-    setTimerStart(p=>({...p,[gid]:Date.now()}));
-    setElapsed(p=>({...p,[gid]:0}));
+  function startTimer(timerKey) {
+    setTimerActive(p=>({...p,[timerKey]:true}));
+    setTimerStart(p=>({...p,[timerKey]:Date.now()}));
+    setElapsed(p=>({...p,[timerKey]:0}));
   }
-  function stopTimer(gid) {
-    const mins = Math.floor((elapsed[gid]||0)/60);
-    setTimerActive(p=>({...p,[gid]:false}));
+  function stopTimer(timerKey) {
+    const mins = Math.floor((elapsed[timerKey]||0)/60);
+    setTimerActive(p=>({...p,[timerKey]:false}));
     if (mins > 0) {
+      // timerKey is either "gid" (legacy) or "gid_bookId"
+      const gid = timerKey.includes("_") ? timerKey.split("_")[0] : timerKey;
+      const bookId = timerKey.includes("_") ? parseInt(timerKey.split("_")[1]) : null;
       const e = { date:new Date().toLocaleDateString(), time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}), mins };
-      save(gid, d => ({...d, screenMinutes:d.screenMinutes+mins, timerLog:[e,...(d.timerLog||[])]}));
+      save(gid, d => ({
+        ...d,
+        screenMinutes: d.screenMinutes+mins,
+        timerLog: [e,...(d.timerLog||[])],
+        books: bookId ? d.books.map(b => b.id===bookId ? {...b, timerLogged:true} : b) : d.books
+      }));
     }
   }
 
@@ -201,26 +223,26 @@ function App() {
     if (!newBook.title.trim()) return;
     const pages = parseInt(newBook.pages)||0;
     const pagesRead = parseInt(newBook.pagesRead)||0;
+    const chapters = parseInt(newBook.chapters)||0;
+    const chapterOn = parseInt(newBook.chapterOn)||1;
     const completed = pages > 0 && pagesRead >= pages;
-    const book = {...newBook, id:Date.now(), dateAdded:new Date().toLocaleDateString(), dateCompleted: completed ? new Date().toLocaleDateString() : null, pages, pagesRead, completed};
+    const book = {...newBook, id:Date.now(), dateAdded:new Date().toLocaleDateString(), dateCompleted:completed?new Date().toLocaleDateString():null, pages, pagesRead, chapters, chapterOn, completed};
     save(gid, d => ({...d, books:[book,...d.books]}));
     if (completed) checkMilestones(gid, (data[gid].books?.length||0)+1);
-    setNewBook({title:"",author:"",pages:"",pagesRead:"",rating:5,note:"",cover:""});
+    setNewBook({title:"",author:"",pages:"",pagesRead:"",chapters:"",chapterOn:"1",rating:5,note:"",cover:""});
     setCoverResults([]); setCoverSearched(false); setAddBook(false);
   }
 
-  function updateProgress(gid, bookId, pagesRead) {
+  function updateProgress(gid, bookId, pagesRead, chapterOn) {
     setData(p => {
       const books = p[gid].books.map(b => {
         if (b.id !== bookId) return b;
         const completed = b.pages > 0 && pagesRead >= b.pages;
         const justCompleted = completed && !b.completed;
-        return {...b, pagesRead, completed, dateCompleted: justCompleted ? new Date().toLocaleDateString() : b.dateCompleted};
+        return {...b, pagesRead, chapterOn, completed, dateCompleted:justCompleted?new Date().toLocaleDateString():b.dateCompleted};
       });
-      const newCompleted = books.filter(b=>b.completed).length;
       return {...p, [gid]: {...p[gid], books}};
     });
-    // check milestones after state updates
     setTimeout(() => {
       setData(p => {
         const completedCount = p[gid].books.filter(b=>b.completed).length;
@@ -246,11 +268,13 @@ function App() {
   async function startQuiz(book, girl) {
     setQuizModal({book,girl}); setQuizLoading(true); setQuizData(null); setQuizAns([]); setQuizDone(false);
     try {
-      const pct = book.pages>0 ? Math.round((book.pagesRead/book.pages)*100) : 100;
+      const chapterInfo = book.chapters
+        ? `The book has ${book.chapters} chapters total. The reader has completed up to and including Chapter ${book.chapterOn}. Only ask about Chapters 1 through ${book.chapterOn}.`
+        : `The reader has read ${book.pagesRead||0} of ${book.pages||"unknown"} pages.`;
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method:"POST", headers:{"Content-Type":"application/json"},
         body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:QUIZ_SYS,
-          messages:[{role:"user",content:`Book: "${book.title}" by ${book.author||"unknown"}. Age: ${girl.age}. Pages: ${book.pagesRead||"all"}/${book.pages||"unknown"} (${pct}%)`}]})
+          messages:[{role:"user",content:`Book: "${book.title}" by ${book.author||"unknown"}. Reader age: ${girl.age}. ${chapterInfo} Generate exactly 3 questions.`}]})
       });
       const d = await res.json();
       const txt = d.content?.map(c=>c.text||"").join("")||"";
@@ -437,15 +461,7 @@ function App() {
           </div>
         )}
 
-        <div style={{...s.card,marginBottom:"1.25rem"}}>
-          <div style={{fontSize:14,fontWeight:600,marginBottom:10}}>Reading timer</div>
-          {isRunning&&<div style={{fontSize:36,fontWeight:700,textAlign:"center",color:girl.color,marginBottom:10}}>{fmtTime(secs)}</div>}
-          <button onClick={()=>isRunning?stopTimer(girl.id):startTimer(girl.id)}
-            style={isRunning?s.solid(girl.color):s.btn(girl.color)}>
-            {isRunning?"⏹ Stop reading":"▶ Start reading"}
-          </button>
-          {isRunning&&<p style={{fontSize:12,color:"#888",textAlign:"center",marginTop:6}}>1 min reading = 1 min screen time</p>}
-        </div>
+
 
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
           <span style={{fontWeight:700,fontSize:16}}>My books</span>
@@ -455,44 +471,61 @@ function App() {
         {gd.books.length===0&&<p style={{color:"#888",fontSize:14,textAlign:"center",padding:"2rem 0"}}>No books yet — add your first one!</p>}
         {gd.books.map(book=>{
           const pct = book.pages>0 ? Math.min(100,Math.round((book.pagesRead/book.pages)*100)) : 0;
+          const bookTimerKey = `${girl.id}_${book.id}`;
+          const bookRunning = timerActive[bookTimerKey];
+          const bookSecs = elapsed[bookTimerKey]||0;
           return (
-          <div key={book.id} style={{...s.card,display:"flex",gap:12}}>
-            {book.cover&&<img src={book.cover} alt={book.title} style={{width:52,borderRadius:6,objectFit:"cover",alignSelf:"flex-start",flexShrink:0}}/>}
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                <div style={{fontWeight:600,fontSize:15}}>{book.title}</div>
-                {book.completed
-                  ? <span style={{fontSize:11,background:"#E1F5EE",color:"#1D9E75",padding:"2px 8px",borderRadius:8,fontWeight:600,flexShrink:0}}>✓ Done</span>
-                  : <span style={{fontSize:11,background:"#FFF8E1",color:"#B8860B",padding:"2px 8px",borderRadius:8,fontWeight:600,flexShrink:0}}>Reading...</span>
-                }
-              </div>
-              {book.author&&<div style={{fontSize:13,color:"#888"}}>{book.author}</div>}
-              <div style={{fontSize:12,color:"#aaa",margin:"3px 0"}}>
-                Added {book.dateAdded}
-                {book.completed&&book.dateCompleted&&` · Finished ${book.dateCompleted}`}
-              </div>
-              {book.pages>0&&(
-                <div style={{margin:"6px 0"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#888",marginBottom:4}}>
-                    <span>{book.pagesRead} of {book.pages} pages</span>
-                    <span>{pct}%</span>
-                  </div>
-                  <div style={{height:6,background:"#f0f0f0",borderRadius:3,overflow:"hidden"}}>
-                    <div style={{height:"100%",width:`${pct}%`,background:book.completed?"#1D9E75":girl.color,borderRadius:3,transition:"width .3s"}}/>
-                  </div>
+          <div key={book.id} style={{...s.card}}>
+            <div style={{display:"flex",gap:12}}>
+              {book.cover&&<img src={book.cover} alt={book.title} style={{width:52,borderRadius:6,objectFit:"cover",alignSelf:"flex-start",flexShrink:0}}/>}
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                  <div style={{fontWeight:600,fontSize:15}}>{book.title}</div>
+                  {book.completed
+                    ? <span style={{fontSize:11,background:"#E1F5EE",color:"#1D9E75",padding:"2px 8px",borderRadius:8,fontWeight:600,flexShrink:0}}>✓ Done</span>
+                    : <span style={{fontSize:11,background:"#FFF8E1",color:"#B8860B",padding:"2px 8px",borderRadius:8,fontWeight:600,flexShrink:0}}>Reading...</span>
+                  }
                 </div>
-              )}
-              {book.note&&<div style={{fontSize:13,color:"#888",fontStyle:"italic",marginTop:3}}>"{book.note}"</div>}
-              <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
-                {!book.completed&&book.pages>0&&(
-                  <UpdateProgress book={book} gid={girl.id} color={girl.color} onUpdate={updateProgress}/>
+                {book.author&&<div style={{fontSize:13,color:"#888"}}>{book.author}</div>}
+                <div style={{fontSize:12,color:"#aaa",margin:"3px 0"}}>
+                  Added {book.dateAdded}
+                  {book.completed&&book.dateCompleted&&` · Finished ${book.dateCompleted}`}
+                </div>
+                {book.pages>0&&(
+                  <div style={{margin:"6px 0"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#888",marginBottom:4}}>
+                      <span>Ch. {book.chapterOn||1}{book.chapters?` of ${book.chapters}`:""} · {book.pagesRead} of {book.pages} pages</span>
+                      <span>{pct}%</span>
+                    </div>
+                    <div style={{height:6,background:"#f0f0f0",borderRadius:3,overflow:"hidden"}}>
+                      <div style={{height:"100%",width:`${pct}%`,background:book.completed?"#1D9E75":girl.color,borderRadius:3,transition:"width .3s"}}/>
+                    </div>
+                  </div>
                 )}
-                {(gd.timerLog&&gd.timerLog.length>0)&&(
-                  <button onClick={()=>startQuiz(book,girl)} style={{background:"#f5f5f7",border:"1px solid #e0e0e0",borderRadius:20,padding:"4px 12px",fontSize:12,color:"#666",cursor:"pointer"}}>
-                    🧠 Comprehension quiz
-                  </button>
-                )}
+                {book.note&&<div style={{fontSize:13,color:"#888",fontStyle:"italic",marginTop:3}}>"{book.note}"</div>}
               </div>
+            </div>
+
+            {/* Per-book timer */}
+            <div style={{marginTop:12,paddingTop:12,borderTop:"1px solid #f0f0f0"}}>
+              {bookRunning&&<div style={{fontSize:28,fontWeight:700,textAlign:"center",color:girl.color,marginBottom:8}}>{fmtTime(bookSecs)}</div>}
+              <button onClick={()=>bookRunning?stopTimer(bookTimerKey):startTimer(bookTimerKey)}
+                style={{...(bookRunning?s.solid(girl.color):s.btn(girl.color)),fontSize:13,padding:"8px"}}>
+                {bookRunning?"⏹ Stop reading":"▶ Start reading this book"}
+              </button>
+              {bookRunning&&<p style={{fontSize:11,color:"#888",textAlign:"center",marginTop:4}}>1 min reading = 1 min screen time</p>}
+            </div>
+
+            {/* Actions */}
+            <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}>
+              {!book.completed&&book.pages>0&&(
+                <UpdateProgress book={book} gid={girl.id} color={girl.color} onUpdate={updateProgress}/>
+              )}
+              {(book.timerLogged||(gd.timerLog&&gd.timerLog.length>0))&&(
+                <button onClick={()=>startQuiz(book,girl)} style={{background:"#f5f5f7",border:"1px solid #e0e0e0",borderRadius:20,padding:"4px 12px",fontSize:12,color:"#666",cursor:"pointer"}}>
+                  🧠 Comprehension quiz
+                </button>
+              )}
             </div>
           </div>
           );
@@ -525,7 +558,7 @@ function App() {
                   {newBook.cover&&<p style={{fontSize:12,color:girl.color,marginTop:6}}>✓ Cover selected</p>}
                 </div>
               )}
-              {[["Author","author","Author name","text"],["Total pages","pages","e.g. 240","number"],["Pages read","pagesRead","e.g. 120","number"]].map(([l,k,ph,t])=>(
+              {[["Author","author","Author name","text"],["Total pages","pages","e.g. 240","number"],["Pages read so far","pagesRead","e.g. 30","number"],["Total chapters","chapters","e.g. 20","number"],["Currently on chapter","chapterOn","e.g. 1","number"]].map(([l,k,ph,t])=>(
                 <div key={k} style={{marginBottom:12}}>
                   <label style={s.label}>{l}</label>
                   <input type={t} value={newBook[k]} onChange={e=>setNewBook(p=>({...p,[k]:e.target.value}))} placeholder={ph} style={s.input}/>
