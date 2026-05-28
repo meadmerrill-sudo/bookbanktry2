@@ -24,20 +24,21 @@
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
 
-const DEFAULT_GIRLS = [
-  { id:"g1", name:"Erin",   age:13, color:"#378ADD", light:"#E6F1FB", avatar:"E" },
-  { id:"g2", name:"Rory",   age:11, color:"#7F77DD", light:"#EEEDFE", avatar:"R" },
-  { id:"g3", name:"Weslie", age:7,  color:"#D4537E", light:"#FBEAF0", avatar:"W" },
+// ── CONSTANTS ────────────────────────────────────────────────────
+const DEFAULT_PROFILES = [
+  { id:"g1", name:"Erin",    age:13, color:"#378ADD", light:"#E6F1FB", avatar:"E" },
+  { id:"g2", name:"Rory",    age:11, color:"#7F77DD", light:"#EEEDFE", avatar:"R" },
+  { id:"g3", name:"Weslie",  age:7,  color:"#D4537E", light:"#FBEAF0", avatar:"W" },
   { id:"g4", name:"Merrill", age:38, color:"#1D9E75", light:"#E1F5EE", avatar:"M" },
 ];
 
 const COLOR_OPTIONS = [
-  { label:"Blue",   color:"#378ADD", light:"#E6F1FB" },
-  { label:"Purple", color:"#7F77DD", light:"#EEEDFE" },
-  { label:"Pink",   color:"#D4537E", light:"#FBEAF0" },
-  { label:"Teal",   color:"#1D9E75", light:"#E1F5EE" },
-  { label:"Coral",  color:"#D85A30", light:"#FAECE7" },
-  { label:"Amber",  color:"#BA7517", light:"#FAEEDA" },
+  { color:"#378ADD", light:"#E6F1FB" },
+  { color:"#7F77DD", light:"#EEEDFE" },
+  { color:"#D4537E", light:"#FBEAF0" },
+  { color:"#1D9E75", light:"#E1F5EE" },
+  { color:"#D85A30", light:"#FAECE7" },
+  { color:"#BA7517", light:"#FAEEDA" },
 ];
 
 const DEFAULT_REWARDS = [
@@ -49,9 +50,11 @@ const DEFAULT_REWARDS = [
   "Extra screen time (60 min)",
 ];
 
+const QUIZ_SYS = `You are a reading comprehension quiz generator. Given a book title, reader age, and the exact chapter they have read up to, generate exactly 3 multiple-choice questions. ONLY ask about events, characters, and plot points from chapters 1 through the stated chapter — never anything beyond it. Age 7: simple plot/characters. Age 11: plot, motivation, themes. Age 13+: themes, inferences, character development. Return ONLY valid JSON, no markdown: {"questions":[{"q":"...","options":["A","B","C","D"],"answer":0}]}`;
+
+// ── HELPERS ──────────────────────────────────────────────────────
 function getMilestones(age, rewards) {
-  const t = age >= 18
-    ? [4,8,13,20,28]
+  const t = age >= 18 ? [4,8,13,20,28]
     : age >= 13 ? [6,10,15,22,30]
     : age >= 11 ? [5,8,12,18,25]
     : [3,5,8,12,15];
@@ -60,7 +63,7 @@ function getMilestones(age, rewards) {
 
 function getStreak(books) {
   if (!books.length) return 0;
-  const dates = [...new Set(books.map(b => b.date))].sort((a,b) => new Date(b)-new Date(a));
+  const dates = [...new Set(books.map(b => b.dateAdded))].sort((a,b) => new Date(b)-new Date(a));
   const today = new Date().toLocaleDateString();
   const yesterday = new Date(Date.now()-86400000).toLocaleDateString();
   if (dates[0] !== today && dates[0] !== yesterday) return 0;
@@ -72,30 +75,39 @@ function getStreak(books) {
   return streak;
 }
 
-function load() {
-  try { return JSON.parse(localStorage.getItem("bookbank_v3") || "null"); } catch { return null; }
+function fmtTime(secs) {
+  const h = Math.floor(secs/3600);
+  const m = Math.floor((secs%3600)/60);
+  const s = secs%60;
+  if (h > 0) return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  return `${m}:${String(s).padStart(2,"0")}`;
 }
 
-function initData() {
-  return DEFAULT_GIRLS.reduce((a,g) => {
-    a[g.id] = { books:[], screenMinutes:0, pendingRewards:[], claimedMilestones:[], withdrawalLog:[], timerLog:[], pin:null };
-    return a;
+function loadState() {
+  try { return JSON.parse(localStorage.getItem("bookbank_v4")||"null"); } catch { return null; }
+}
+
+function initProfileData() {
+  return DEFAULT_PROFILES.reduce((acc, p) => {
+    acc[p.id] = { books:[], screenMinutes:0, pendingRewards:[], claimedMilestones:[], withdrawalLog:[], timerLog:[], pin:null };
+    return acc;
   }, {});
 }
 
-const QUIZ_SYS = `You are a reading comprehension quiz generator for children. You will be given a book title, the reader's age, and exactly which chapter they have read up to. You MUST only ask questions about events, characters, and plot points that occur in or before that chapter. Never ask about anything that happens after that chapter. Age 7: simple plot/characters. Age 11: plot, motivation, themes. Age 13: themes, inferences, development. Return ONLY valid JSON: {"questions":[{"q":"...","options":["A","B","C","D"],"answer":0}]}`;
-
-const s = {
-  card: { background:"#fff", border:"0.5px solid rgba(0,0,0,0.1)", borderRadius:12, padding:"1rem 1.25rem", marginBottom:10 },
-  btn:  (c) => ({ width:"100%", padding:"11px", borderRadius:10, border:`1.5px solid ${c}`, background:"transparent", color:c, fontWeight:600, fontSize:15, cursor:"pointer" }),
-  solid:(c) => ({ width:"100%", padding:"11px", borderRadius:10, border:"none", background:c, color:"#fff", fontWeight:600, fontSize:15, cursor:"pointer" }),
-  input:{ width:"100%", padding:"10px 12px", borderRadius:10, border:"1px solid rgba(0,0,0,0.15)", background:"#f5f5f7", fontSize:15, boxSizing:"border-box", color:"#1a1a1a" },
-  label:{ fontSize:13, color:"#666", display:"block", marginBottom:5 },
+// ── STYLES ───────────────────────────────────────────────────────
+const S = {
+  card:  { background:"#fff", border:"0.5px solid rgba(0,0,0,0.1)", borderRadius:12, padding:"1rem 1.25rem", marginBottom:10 },
+  btn:   (c) => ({ width:"100%", padding:"11px", borderRadius:10, border:`1.5px solid ${c}`, background:"transparent", color:c, fontWeight:600, fontSize:15, cursor:"pointer" }),
+  solid: (c) => ({ width:"100%", padding:"11px", borderRadius:10, border:"none", background:c, color:"#fff", fontWeight:600, fontSize:15, cursor:"pointer" }),
+  input: { width:"100%", padding:"10px 12px", borderRadius:10, border:"1px solid rgba(0,0,0,0.15)", background:"#f5f5f7", fontSize:15, boxSizing:"border-box", color:"#1a1a1a" },
+  lbl:   { fontSize:13, color:"#666", display:"block", marginBottom:5 },
+  pill:  (bg, color) => ({ fontSize:11, background:bg, color, padding:"2px 8px", borderRadius:8, fontWeight:600, flexShrink:0 }),
 };
 
+// ── UPDATE PROGRESS COMPONENT ────────────────────────────────────
 function UpdateProgress({ book, gid, color, onUpdate }) {
   const [open, setOpen] = useState(false);
-  const [pages, setPages] = useState(book.pagesRead);
+  const [pages, setPages] = useState(book.pagesRead||0);
   const [chapter, setChapter] = useState(book.chapterOn||1);
   if (!open) return (
     <button onClick={()=>setOpen(true)} style={{background:"transparent",border:`1px solid ${color}`,borderRadius:20,padding:"4px 12px",fontSize:12,color,cursor:"pointer",fontWeight:600}}>
@@ -104,116 +116,200 @@ function UpdateProgress({ book, gid, color, onUpdate }) {
   );
   return (
     <div style={{background:"#f9f9f9",borderRadius:10,padding:"10px 12px",marginTop:4,width:"100%"}}>
-      <div style={{display:"flex",gap:12,marginBottom:8,flexWrap:"wrap"}}>
-        <div style={{flex:1,minWidth:80}}>
+      <div style={{display:"flex",gap:12,marginBottom:8}}>
+        <div style={{flex:1}}>
           <div style={{fontSize:11,color:"#888",marginBottom:4}}>Pages read</div>
-          <input type="number" min={0} max={book.pages} value={pages} onChange={e=>setPages(parseInt(e.target.value)||0)}
-            style={{width:"100%",padding:"6px 8px",borderRadius:8,border:`1.5px solid ${color}`,fontSize:14,textAlign:"center"}}/>
-          <div style={{fontSize:10,color:"#aaa",textAlign:"center",marginTop:2}}>of {book.pages}</div>
+          <input type="number" min={0} max={book.pages||9999} value={pages} onChange={e=>setPages(parseInt(e.target.value)||0)}
+            style={{...S.input,textAlign:"center",fontSize:14}}/>
+          <div style={{fontSize:10,color:"#aaa",textAlign:"center",marginTop:2}}>of {book.pages||"?"}</div>
         </div>
-        <div style={{flex:1,minWidth:80}}>
+        <div style={{flex:1}}>
           <div style={{fontSize:11,color:"#888",marginBottom:4}}>Current chapter</div>
           <input type="number" min={1} max={book.chapters||999} value={chapter} onChange={e=>setChapter(parseInt(e.target.value)||1)}
-            style={{width:"100%",padding:"6px 8px",borderRadius:8,border:`1.5px solid ${color}`,fontSize:14,textAlign:"center"}}/>
+            style={{...S.input,textAlign:"center",fontSize:14}}/>
           <div style={{fontSize:10,color:"#aaa",textAlign:"center",marginTop:2}}>of {book.chapters||"?"}</div>
         </div>
       </div>
       <div style={{display:"flex",gap:8}}>
-        <button onClick={()=>{onUpdate(gid,book.id,pages,chapter);setOpen(false);}}
-          style={{flex:1,background:color,border:"none",borderRadius:20,padding:"6px 0",fontSize:13,color:"#fff",cursor:"pointer",fontWeight:600}}>Save</button>
-        <button onClick={()=>setOpen(false)}
-          style={{flex:1,background:"none",border:"1px solid #e0e0e0",borderRadius:20,padding:"6px 0",fontSize:13,color:"#888",cursor:"pointer"}}>Cancel</button>
+        <button onClick={()=>{onUpdate(gid,book.id,pages,chapter);setOpen(false);}} style={{...S.solid(color),flex:1,padding:"8px"}}>Save</button>
+        <button onClick={()=>setOpen(false)} style={{...S.btn("#888"),flex:1,padding:"8px"}}>Cancel</button>
       </div>
     </div>
   );
 }
 
+// ── MAIN APP ─────────────────────────────────────────────────────
 function App() {
-  const saved = load();
-  const [girls, setGirls]           = useState(saved?.girls      || DEFAULT_GIRLS);
-  const [data,  setData]            = useState(saved?.data       || initData());
+  const saved = loadState();
+  const [profiles, setProfiles]     = useState(saved?.profiles   || DEFAULT_PROFILES);
+  const [pData, setPData]           = useState(saved?.pData      || initProfileData());
   const [rewards, setRewards]       = useState(saved?.rewards    || DEFAULT_REWARDS);
   const [parentPin, setParentPin]   = useState(saved?.parentPin  || "1234");
 
+  // navigation
   const [screen, setScreen]         = useState("home");
-  const [activeGid, setActiveGid]   = useState(null);
+  const [activeId, setActiveId]     = useState(null);
   const [parentUnlocked, setParentUnlocked] = useState(false);
+  const [parentTab, setParentTab]   = useState("overview");
+
+  // pin flow
   const [pinInput, setPinInput]     = useState("");
   const [pinConfirm, setPinConfirm] = useState("");
   const [pinError, setPinError]     = useState("");
   const [pinStep, setPinStep]       = useState(1);
 
+  // timers: key = "profileId_bookId"
   const [timerActive, setTimerActive] = useState({});
   const [timerStart,  setTimerStart]  = useState({});
   const [elapsed,     setElapsed]     = useState({});
   const intRef = useRef(null);
 
-  const [addBook,       setAddBook]       = useState(false);
-  const [quizModal,     setQuizModal]     = useState(null);
-  const [quizData,      setQuizData]      = useState(null);
-  const [quizLoading,   setQuizLoading]   = useState(false);
-  const [quizAns,       setQuizAns]       = useState([]);
-  const [quizDone,      setQuizDone]      = useState(false);
-  const [newBook,       setNewBook]       = useState({ title:"", author:"", pages:"", pagesRead:"", rating:5, note:"", cover:"" });
-  const [coverLoading,  setCoverLoading]  = useState(false);
-  const [coverResults,  setCoverResults]  = useState([]);
-  const [coverSearched, setCoverSearched] = useState(false);
-  const [editGirl,      setEditGirl]      = useState(null);
-  const [spendModal,    setSpendModal]    = useState(null);
-  const [spendAmt,      setSpendAmt]      = useState(30);
-  const [parentTab,     setParentTab]     = useState("overview");
-  const [editRewards,   setEditRewards]   = useState(false);
-  const [rewardDraft,   setRewardDraft]   = useState([]);
-  const [changingPPin,  setChangingPPin]  = useState(false);
-  const [newPPin,       setNewPPin]       = useState("");
+  // modals
+  const [showAddBook,    setShowAddBook]    = useState(false);
+  const [quizModal,      setQuizModal]      = useState(null);
+  const [quizData,       setQuizData]       = useState(null);
+  const [quizLoading,    setQuizLoading]    = useState(false);
+  const [quizAns,        setQuizAns]        = useState([]);
+  const [quizDone,       setQuizDone]       = useState(false);
+  const [editProfile,    setEditProfile]    = useState(null);
+  const [spendModal,     setSpendModal]     = useState(null);
+  const [spendAmt,       setSpendAmt]       = useState(30);
+  const [editRewards,    setEditRewards]    = useState(false);
+  const [rewardDraft,    setRewardDraft]    = useState([]);
+  const [changingPPin,   setChangingPPin]   = useState(false);
+  const [newPPin,        setNewPPin]        = useState("");
+  const [coverResults,   setCoverResults]   = useState([]);
+  const [coverLoading,   setCoverLoading]   = useState(false);
+  const [coverSearched,  setCoverSearched]  = useState(false);
+  const [newBook, setNewBook] = useState({ title:"", author:"", pages:"", pagesRead:"", chapters:"", chapterOn:"1", rating:5, note:"", cover:"" });
 
+  // ── persist ──
   useEffect(() => {
-    try { localStorage.setItem("bookbank_v3", JSON.stringify({ girls, data, rewards, parentPin })); } catch {}
-  }, [girls, data, rewards, parentPin]);
+    try { localStorage.setItem("bookbank_v4", JSON.stringify({ profiles, pData, rewards, parentPin })); } catch {}
+  }, [profiles, pData, rewards, parentPin]);
 
+  // ── timer tick ──
   useEffect(() => {
     if (Object.values(timerActive).some(Boolean)) {
       intRef.current = setInterval(() => {
         const now = Date.now();
-        setElapsed(p => {
-          const n = {...p};
-          girls.forEach(g => { if (timerActive[g.id] && timerStart[g.id]) n[g.id] = Math.floor((now-timerStart[g.id])/1000); });
-          return n;
+        setElapsed(prev => {
+          const next = {...prev};
+          Object.keys(timerActive).forEach(key => {
+            if (timerActive[key] && timerStart[key]) next[key] = Math.floor((now - timerStart[key]) / 1000);
+          });
+          return next;
         });
       }, 1000);
-    } else clearInterval(intRef.current);
+    } else {
+      clearInterval(intRef.current);
+    }
     return () => clearInterval(intRef.current);
   }, [timerActive, timerStart]);
 
-  function save(gid, fn) { setData(p => ({...p, [gid]: fn(p[gid])})); }
-  function fmtTime(s) {
-    const h=Math.floor(s/3600);
-    const m=Math.floor((s%3600)/60);
-    const sec=s%60;
-    if(h>0) return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
-    return `${m}:${String(sec).padStart(2,"0")}`;
+  // ── data helpers ──
+  function saveProfile(pid, fn) {
+    setPData(prev => ({ ...prev, [pid]: fn(prev[pid]) }));
   }
 
-  function startTimer(timerKey) {
-    setTimerActive(p=>({...p,[timerKey]:true}));
-    setTimerStart(p=>({...p,[timerKey]:Date.now()}));
-    setElapsed(p=>({...p,[timerKey]:0}));
+  function startTimer(key) {
+    setTimerActive(p => ({...p, [key]: true}));
+    setTimerStart(p => ({...p, [key]: Date.now()}));
+    setElapsed(p => ({...p, [key]: 0}));
   }
-  function stopTimer(timerKey) {
-    const mins = Math.floor((elapsed[timerKey]||0)/60);
-    setTimerActive(p=>({...p,[timerKey]:false}));
+
+  function stopTimer(key) {
+    const mins = Math.floor((elapsed[key]||0) / 60);
+    setTimerActive(p => ({...p, [key]: false}));
     if (mins > 0) {
-      // timerKey is either "gid" (legacy) or "gid_bookId"
-      const gid = timerKey.includes("_") ? timerKey.split("_")[0] : timerKey;
-      const bookId = timerKey.includes("_") ? parseInt(timerKey.split("_")[1]) : null;
-      const e = { date:new Date().toLocaleDateString(), time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}), mins };
-      save(gid, d => ({
+      const pid = key.split("_")[0];
+      const bookId = parseInt(key.split("_")[1]);
+      const entry = { date:new Date().toLocaleDateString(), time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}), mins };
+      saveProfile(pid, d => ({
         ...d,
-        screenMinutes: d.screenMinutes+mins,
-        timerLog: [e,...(d.timerLog||[])],
-        books: bookId ? d.books.map(b => b.id===bookId ? {...b, timerLogged:true} : b) : d.books
+        screenMinutes: d.screenMinutes + mins,
+        timerLog: [entry, ...(d.timerLog||[])],
+        books: d.books.map(b => b.id === bookId ? {...b, timerLogged:true} : b),
       }));
     }
+  }
+
+  function checkMilestones(pid, completedCount) {
+    const prof = profiles.find(p => p.id === pid);
+    const milestones = getMilestones(prof.age, rewards);
+    milestones.forEach(m => {
+      if (completedCount >= m.books) {
+        setPData(prev => {
+          const d = prev[pid];
+          if (d.claimedMilestones.includes(m.books) || d.pendingRewards.find(r => r.milestone === m.books)) return prev;
+          return { ...prev, [pid]: { ...d, pendingRewards: [...d.pendingRewards, { milestone:m.books, reward:m.reward, id:Date.now() }] }};
+        });
+      }
+    });
+  }
+
+  function doAddBook(pid) {
+    if (!newBook.title.trim()) return;
+    const pages    = parseInt(newBook.pages)||0;
+    const pagesRead= parseInt(newBook.pagesRead)||0;
+    const chapters = parseInt(newBook.chapters)||0;
+    const chapterOn= parseInt(newBook.chapterOn)||1;
+    // completion is chapter-based
+    const completed = chapters > 0 && chapterOn >= chapters;
+    const book = {
+      ...newBook, id:Date.now(),
+      dateAdded: new Date().toLocaleDateString(),
+      dateCompleted: completed ? new Date().toLocaleDateString() : null,
+      pages, pagesRead, chapters, chapterOn, completed, timerLogged:false,
+    };
+    saveProfile(pid, d => ({ ...d, books:[book, ...d.books] }));
+    if (completed) {
+      setTimeout(() => {
+        const count = (pData[pid].books.filter(b=>b.completed).length) + 1;
+        checkMilestones(pid, count);
+      }, 50);
+    }
+    setNewBook({ title:"", author:"", pages:"", pagesRead:"", chapters:"", chapterOn:"1", rating:5, note:"", cover:"" });
+    setCoverResults([]); setCoverSearched(false); setShowAddBook(false);
+  }
+
+  function updateProgress(pid, bookId, pagesRead, chapterOn) {
+    setPData(prev => {
+      const books = prev[pid].books.map(b => {
+        if (b.id !== bookId) return b;
+        const completed = b.chapters > 0 && chapterOn >= b.chapters;
+        const justCompleted = completed && !b.completed;
+        return { ...b, pagesRead, chapterOn, completed, dateCompleted: justCompleted ? new Date().toLocaleDateString() : b.dateCompleted };
+      });
+      return { ...prev, [pid]: { ...prev[pid], books } };
+    });
+    setTimeout(() => {
+      setPData(prev => {
+        const count = prev[pid].books.filter(b=>b.completed).length;
+        checkMilestones(pid, count);
+        return prev;
+      });
+    }, 50);
+  }
+
+  function approveReward(pid, rid) {
+    setPData(prev => {
+      const r = prev[pid].pendingRewards.find(x => x.id === rid);
+      return { ...prev, [pid]: {
+        ...prev[pid],
+        pendingRewards: prev[pid].pendingRewards.filter(x => x.id !== rid),
+        claimedMilestones: [...prev[pid].claimedMilestones, r.milestone],
+      }};
+    });
+  }
+
+  function doSpend(pid, mins) {
+    const entry = { date:new Date().toLocaleDateString(), time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}), mins };
+    saveProfile(pid, d => ({
+      ...d,
+      screenMinutes: Math.max(0, d.screenMinutes - mins),
+      withdrawalLog: [entry, ...(d.withdrawalLog||[])],
+    }));
   }
 
   async function searchCovers(title) {
@@ -224,83 +320,24 @@ function App() {
       const j = await r.json();
       setCoverResults((j.docs||[]).filter(d=>d.cover_i).slice(0,6).map(d=>({
         id:d.cover_i, title:d.title, author:d.author_name?.[0]||"",
-        url:`https://covers.openlibrary.org/b/id/${d.cover_i}-M.jpg`
+        url:`https://covers.openlibrary.org/b/id/${d.cover_i}-M.jpg`,
       })));
     } catch { setCoverResults([]); }
     setCoverLoading(false);
   }
 
-  function doAddBook(gid) {
-    if (!newBook.title.trim()) return;
-    const pages = parseInt(newBook.pages)||0;
-    const pagesRead = parseInt(newBook.pagesRead)||0;
-    const chapters = parseInt(newBook.chapters)||0;
-    const chapterOn = parseInt(newBook.chapterOn)||1;
-    const completed = chapters > 0 && chapterOn >= chapters;
-    const book = {...newBook, id:Date.now(), dateAdded:new Date().toLocaleDateString(), dateCompleted:completed?new Date().toLocaleDateString():null, pages, pagesRead, chapters, chapterOn, completed};
-    setData(p => {
-      const updated = {...p, [gid]: {...p[gid], books:[book,...p[gid].books]}};
-      const completedCount = updated[gid].books.filter(b=>b.completed).length;
-      // only trigger milestone check if this book is already complete on add
-      if (completed) {
-        const girl = girls.find(g=>g.id===gid);
-        getMilestones(girl.age, rewards).forEach(m => {
-          if (completedCount >= m.books) {
-            const d = updated[gid];
-            if (!d.claimedMilestones.includes(m.books) && !d.pendingRewards.find(r=>r.milestone===m.books)) {
-              updated[gid] = {...updated[gid], pendingRewards:[...updated[gid].pendingRewards, {milestone:m.books, reward:m.reward, id:Date.now()}]};
-            }
-          }
-        });
-      }
-      return updated;
-    });
-    setNewBook({title:"",author:"",pages:"",pagesRead:"",chapters:"",chapterOn:"1",rating:5,note:"",cover:""});
-    setCoverResults([]); setCoverSearched(false); setAddBook(false);
-  }
-
-  function updateProgress(gid, bookId, pagesRead, chapterOn) {
-    setData(p => {
-      const books = p[gid].books.map(b => {
-        if (b.id !== bookId) return b;
-        const completed = b.chapters > 0 && chapterOn >= b.chapters;
-        const justCompleted = completed && !b.completed;
-        return {...b, pagesRead, chapterOn, completed, dateCompleted:justCompleted?new Date().toLocaleDateString():b.dateCompleted};
-      });
-      return {...p, [gid]: {...p[gid], books}};
-    });
-    setTimeout(() => {
-      setData(p => {
-        const completedCount = p[gid].books.filter(b=>b.completed).length;
-        checkMilestones(gid, completedCount);
-        return p;
-      });
-    }, 50);
-  }
-
-  function checkMilestones(gid, count) {
-    const girl = girls.find(g=>g.id===gid);
-    getMilestones(girl.age, rewards).forEach(m => {
-      if (count >= m.books) {
-        setData(p => {
-          const d = p[gid];
-          if (d.claimedMilestones.includes(m.books) || d.pendingRewards.find(r=>r.milestone===m.books)) return p;
-          return {...p, [gid]:{...d, pendingRewards:[...d.pendingRewards,{milestone:m.books,reward:m.reward,id:Date.now()}]}};
-        });
-      }
-    });
-  }
-
-  async function startQuiz(book, girl) {
-    setQuizModal({book,girl}); setQuizLoading(true); setQuizData(null); setQuizAns([]); setQuizDone(false);
+  async function startQuiz(book, prof) {
+    setQuizModal({book,prof}); setQuizLoading(true); setQuizData(null); setQuizAns([]); setQuizDone(false);
     try {
-      const chapterInfo = book.chapters
-        ? `The book has ${book.chapters} chapters total. The reader has completed up to and including Chapter ${book.chapterOn}. Only ask about Chapters 1 through ${book.chapterOn}.`
+      const chInfo = book.chapters
+        ? `The book has ${book.chapters} chapters. The reader has completed up to and including Chapter ${book.chapterOn}. Only ask about Chapters 1 through ${book.chapterOn}.`
         : `The reader has read ${book.pagesRead||0} of ${book.pages||"unknown"} pages.`;
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:QUIZ_SYS,
-          messages:[{role:"user",content:`Book: "${book.title}" by ${book.author||"unknown"}. Reader age: ${girl.age}. ${chapterInfo} Generate exactly 3 questions.`}]})
+        body: JSON.stringify({
+          model:"claude-sonnet-4-20250514", max_tokens:1000, system:QUIZ_SYS,
+          messages:[{ role:"user", content:`Book: "${book.title}" by ${book.author||"unknown"}. Reader age: ${prof.age}. ${chInfo} Generate exactly 3 questions.` }],
+        }),
       });
       const d = await res.json();
       const txt = d.content?.map(c=>c.text||"").join("")||"";
@@ -309,45 +346,38 @@ function App() {
     setQuizLoading(false);
   }
 
-  function approveReward(gid, rid) {
-    setData(p => {
-      const r = p[gid].pendingRewards.find(x=>x.id===rid);
-      return {...p,[gid]:{...p[gid],pendingRewards:p[gid].pendingRewards.filter(x=>x.id!==rid),claimedMilestones:[...p[gid].claimedMilestones,r.milestone]}};
-    });
-  }
-
-  function doSpend(gid, mins) {
-    const e = {date:new Date().toLocaleDateString(),time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}),mins,reason:"Screen time used"};
-    save(gid, d => ({...d, screenMinutes:Math.max(0,d.screenMinutes-mins), withdrawalLog:[e,...(d.withdrawalLog||[])]}));
-  }
-
-  function handleProfileTap(gid) {
-    const gd = data[gid];
-    if (!gd.pin) { setActiveGid(gid); setPinInput(""); setPinConfirm(""); setPinStep(1); setPinError(""); setScreen("pinSetup"); }
-    else { setActiveGid(gid); setPinInput(""); setPinError(""); setScreen("pinEntry"); }
+  // ── PIN handlers ──
+  function handleProfileTap(pid) {
+    const d = pData[pid];
+    setActiveId(pid);
+    if (!d.pin) { setPinInput(""); setPinConfirm(""); setPinStep(1); setPinError(""); setScreen("pinSetup"); }
+    else { setPinInput(""); setPinError(""); setScreen("pinEntry"); }
   }
 
   function handlePinSetup() {
-    if (pinStep===1) {
-      if (pinInput.length<4) { setPinError("PIN must be at least 4 digits"); return; }
+    if (pinStep === 1) {
+      if (pinInput.length < 4) { setPinError("PIN must be at least 4 digits"); return; }
       setPinConfirm(pinInput); setPinInput(""); setPinStep(2); setPinError("");
     } else {
-      if (pinInput!==pinConfirm) { setPinError("PINs don't match — try again"); setPinInput(""); setPinStep(1); return; }
-      save(activeGid, d=>({...d,pin:pinInput}));
+      if (pinInput !== pinConfirm) { setPinError("PINs don't match — try again"); setPinInput(""); setPinStep(1); return; }
+      saveProfile(activeId, d => ({...d, pin:pinInput}));
       setPinInput(""); setPinError(""); setScreen("profile");
     }
   }
 
   function handlePinEntry() {
-    if (pinInput===data[activeGid].pin) { setPinInput(""); setPinError(""); setScreen("profile"); }
+    if (pinInput === pData[activeId].pin) { setPinInput(""); setPinError(""); setScreen("profile"); }
     else { setPinError("Wrong PIN, try again"); setPinInput(""); }
   }
 
-  const girl = activeGid ? girls.find(g=>g.id===activeGid) : null;
-  const gd   = activeGid ? data[activeGid] : null;
+  // ── convenience ──
+  const prof = activeId ? profiles.find(p => p.id === activeId) : null;
+  const pd   = activeId ? pData[activeId] : null;
 
-  // ── HOME ────────────────────────────────────────────
-  if (screen==="home") return (
+  // ════════════════════════════════════════════════════
+  // HOME
+  // ════════════════════════════════════════════════════
+  if (screen === "home") return (
     <div style={{maxWidth:480,margin:"0 auto",padding:"2rem 1rem 1rem"}}>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:"1.75rem"}}>
         <svg width="40" height="40" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
@@ -373,7 +403,6 @@ function App() {
           <rect x="210" y="102" width="92" height="24" rx="12" fill="#3C3489"/>
           <circle cx="256" cy="54" r="52" fill="#F9C74F"/>
           <circle cx="256" cy="54" r="36" fill="none" stroke="#EF9F27" strokeWidth="7"/>
-          {/* $ sign drawn as paths instead of text for cross-browser SVG compatibility */}
           <path d="M256,28 L256,80" stroke="#7A5010" strokeWidth="6" strokeLinecap="round"/>
           <path d="M244,38 Q232,38 232,50 Q232,62 256,62 Q280,62 280,74 Q280,86 256,86" fill="none" stroke="#7A5010" strokeWidth="6" strokeLinecap="round"/>
           <path d="M268,38 Q280,38 280,50" fill="none" stroke="#7A5010" strokeWidth="6" strokeLinecap="round"/>
@@ -386,89 +415,101 @@ function App() {
         <div>
           <div style={{fontSize:11,color:"#888",letterSpacing:1,textTransform:"uppercase",fontWeight:600}}>BookBank</div>
           <div style={{fontSize:20,fontWeight:700}}>Who's reading today?</div>
-          
         </div>
       </div>
-      {girls.map(g => {
-        const d=data[g.id]||{};
-        const streak=getStreak(d.books||[]);
-        const pending=(d.pendingRewards||[]).length;
+
+      {profiles.map(p => {
+        const d = pData[p.id] || {};
+        const streak = getStreak(d.books||[]);
+        const pending = (d.pendingRewards||[]).length;
+        const anyRunning = Object.keys(timerActive).some(k => k.startsWith(p.id+"_") && timerActive[k]);
         return (
-          <div key={g.id} onClick={()=>handleProfileTap(g.id)}
-            style={{...s.card,cursor:"pointer",display:"flex",alignItems:"center",gap:14}}>
-            <div style={{width:52,height:52,borderRadius:"50%",background:g.light,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:20,color:g.color,flexShrink:0}}>{g.avatar}</div>
+          <div key={p.id} onClick={()=>handleProfileTap(p.id)}
+            style={{...S.card,cursor:"pointer",display:"flex",alignItems:"center",gap:14}}>
+            <div style={{width:52,height:52,borderRadius:"50%",background:p.light,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:20,color:p.color,flexShrink:0}}>{p.avatar}</div>
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                <span style={{fontWeight:600,fontSize:16}}>{g.name}</span>
-                {g.age < 18 && <span style={{fontSize:12,color:"#888"}}>age {g.age}</span>}
-                {!d.pin&&<span style={{fontSize:11,background:"#FFF3CD",color:"#856404",padding:"2px 8px",borderRadius:8,fontWeight:600}}>Set up PIN</span>}
-                {pending>0&&<span style={{fontSize:11,background:g.light,color:g.color,padding:"2px 8px",borderRadius:8,fontWeight:600}}>{pending} reward{pending>1?"s":""} ready!</span>}
-                {streak>1&&<span style={{fontSize:11,background:"#FFF8E1",color:"#B8860B",padding:"2px 8px",borderRadius:8,fontWeight:600}}>{streak} day streak 🔥</span>}
+                <span style={{fontWeight:600,fontSize:16}}>{p.name}</span>
+                {p.age < 18 && <span style={{fontSize:12,color:"#888"}}>age {p.age}</span>}
+                {!d.pin && <span style={S.pill("#FFF3CD","#856404")}>Set up PIN</span>}
+                {pending > 0 && <span style={S.pill(p.light,p.color)}>{pending} reward{pending>1?"s":""} ready!</span>}
+                {streak > 1 && <span style={S.pill("#FFF8E1","#B8860B")}>{streak} day streak 🔥</span>}
               </div>
               <div style={{display:"flex",gap:14,marginTop:4}}>
-                <span style={{fontSize:13,color:"#888"}}>📚 {(d.books||[]).length} books</span>
+                <span style={{fontSize:13,color:"#888"}}>📚 {(d.books||[]).filter(b=>b.completed).length} books</span>
                 <span style={{fontSize:13,color:"#888"}}>📱 {d.screenMinutes||0} min</span>
               </div>
             </div>
-            {timerActive[g.id]&&<div style={{width:10,height:10,borderRadius:"50%",background:g.color}}/>}
+            {anyRunning && <div style={{width:10,height:10,borderRadius:"50%",background:p.color,flexShrink:0}}/>}
             <span style={{color:"#ccc",fontSize:20}}>›</span>
           </div>
         );
       })}
-      <button onClick={()=>setScreen("parent")} style={{...s.btn("#888"),marginTop:8,fontSize:14,color:"#666"}}>🔒 Parent dashboard</button>
+
+      <button onClick={()=>setScreen("parent")} style={{...S.btn("#888"),marginTop:8,fontSize:14,color:"#666"}}>
+        🔒 Parent dashboard
+      </button>
     </div>
   );
 
-  // ── PIN SETUP / ENTRY ────────────────────────────────
-  if (screen==="pinSetup"||screen==="pinEntry") {
-    const isSetup=screen==="pinSetup";
-    const g=girls.find(x=>x.id===activeGid);
+  // ════════════════════════════════════════════════════
+  // PIN SETUP / ENTRY
+  // ════════════════════════════════════════════════════
+  if (screen === "pinSetup" || screen === "pinEntry") {
+    const isSetup = screen === "pinSetup";
+    const p = profiles.find(x => x.id === activeId);
     return (
       <div style={{maxWidth:360,margin:"0 auto",padding:"3rem 1.5rem"}}>
         <button onClick={()=>setScreen("home")} style={{background:"none",border:"none",color:"#888",fontSize:15,cursor:"pointer",marginBottom:"1.5rem",padding:0}}>← Back</button>
-        <div style={{width:64,height:64,borderRadius:"50%",background:g.light,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:24,color:g.color,marginBottom:"1rem"}}>{g.avatar}</div>
+        <div style={{width:64,height:64,borderRadius:"50%",background:p.light,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:24,color:p.color,marginBottom:"1rem"}}>{p.avatar}</div>
         <h2 style={{fontSize:22,fontWeight:700,marginBottom:6}}>
-          {isSetup?(pinStep===1?`Create your PIN, ${g.name}`:"Confirm your PIN"):`Hi ${g.name}!`}
+          {isSetup ? (pinStep===1 ? `Create your PIN, ${p.name}` : "Confirm your PIN") : `Hi ${p.name}!`}
         </h2>
         <p style={{color:"#888",fontSize:14,marginBottom:"1.5rem"}}>
-          {isSetup?(pinStep===1?"Choose a 4-digit PIN only you know.":"Enter your PIN one more time to confirm."):"Enter your PIN to continue."}
+          {isSetup ? (pinStep===1 ? "Choose a 4-digit PIN only you know." : "Enter your PIN one more time to confirm.") : "Enter your PIN to continue."}
         </p>
-        <input type="password" inputMode="numeric" maxLength={6} value={pinInput}
-          onChange={e=>{setPinInput(e.target.value.replace(/\D/g,""));setPinError("");}}
-          onKeyDown={e=>e.key==="Enter"&&(isSetup?handlePinSetup():handlePinEntry())}
-          placeholder="••••" autoFocus
-          style={{...s.input,fontSize:28,textAlign:"center",letterSpacing:8,marginBottom:10}}/>
-        {pinError&&<p style={{color:"#E24B4A",fontSize:13,marginBottom:10}}>{pinError}</p>}
-        <button onClick={()=>isSetup?handlePinSetup():handlePinEntry()} style={s.solid(g.color)}>
-          {isSetup?(pinStep===1?"Next":"Create PIN"):"Unlock"}
+        <input type="password" inputMode="numeric" maxLength={6} value={pinInput} autoFocus
+          onChange={e=>{setPinInput(e.target.value.replace(/\D/g,"")); setPinError("");}}
+          onKeyDown={e=>e.key==="Enter" && (isSetup ? handlePinSetup() : handlePinEntry())}
+          placeholder="••••"
+          style={{...S.input,fontSize:28,textAlign:"center",letterSpacing:8,marginBottom:10}}/>
+        {pinError && <p style={{color:"#E24B4A",fontSize:13,marginBottom:10}}>{pinError}</p>}
+        <button onClick={()=>isSetup?handlePinSetup():handlePinEntry()} style={S.solid(p.color)}>
+          {isSetup ? (pinStep===1?"Next":"Create PIN") : "Unlock"}
         </button>
       </div>
     );
   }
 
-  // ── PROFILE ──────────────────────────────────────────
-  if (screen==="profile"&&girl&&gd) {
-    const milestones=getMilestones(girl.age,rewards);
-    const next=milestones.find(m=>gd.books.length<m.books&&!gd.claimedMilestones.includes(m.books));
-    const progress=next?Math.min(100,Math.round((gd.books.length/next.books)*100)):100;
-    const isRunning=timerActive[girl.id];
-    const secs=elapsed[girl.id]||0;
-    const streak=getStreak(gd.books||[]);
+  // ════════════════════════════════════════════════════
+  // PROFILE
+  // ════════════════════════════════════════════════════
+  if (screen === "profile" && prof && pd) {
+    const completedBooks  = pd.books.filter(b => b.completed);
+    const completedCount  = completedBooks.length;
+    const milestones      = getMilestones(prof.age, rewards);
+    const nextMilestone   = milestones.find(m => completedCount < m.books && !pd.claimedMilestones.includes(m.books));
+    const progress        = nextMilestone ? Math.min(100, Math.round((completedCount / nextMilestone.books) * 100)) : 100;
+    const streak          = getStreak(pd.books||[]);
 
     return (
       <div style={{maxWidth:480,margin:"0 auto",padding:"1.5rem 1rem 2rem"}}>
+
+        {/* Header */}
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:"1.5rem"}}>
           <button onClick={()=>setScreen("home")} style={{background:"none",border:"none",color:"#888",fontSize:22,cursor:"pointer",padding:0,lineHeight:1}}>←</button>
-          <div style={{width:40,height:40,borderRadius:"50%",background:girl.light,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,color:girl.color}}>{girl.avatar}</div>
+          <div style={{width:40,height:40,borderRadius:"50%",background:prof.light,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,color:prof.color}}>{prof.avatar}</div>
           <div>
-            <span style={{fontWeight:700,fontSize:17}}>{girl.name}</span>
-            {girl.age < 18 && <span style={{color:"#888",fontSize:13,marginLeft:6}}>age {girl.age}</span>}
+            <span style={{fontWeight:700,fontSize:17}}>{prof.name}</span>
+            {prof.age < 18 && <span style={{color:"#888",fontSize:13,marginLeft:6}}>age {prof.age}</span>}
           </div>
-          {gd.pendingRewards.length>0&&<span style={{marginLeft:"auto",background:girl.light,color:girl.color,fontSize:12,padding:"4px 12px",borderRadius:20,fontWeight:600}}>🎁 {gd.pendingRewards.length} ready!</span>}
+          {pd.pendingRewards.length > 0 &&
+            <span style={{marginLeft:"auto",...S.pill(prof.light,prof.color)}}>🎁 {pd.pendingRewards.length} ready!</span>}
         </div>
 
+        {/* Stats */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:"1.25rem"}}>
-          {[["📱 Banked",`${gd.screenMinutes} min`],["📚 Books",gd.books.filter(b=>b.completed).length],["🔥 Streak",streak?`${streak}d`:"—"]].map(([l,v])=>(
+          {[["📱 Banked",`${pd.screenMinutes} min`],["📚 Books",completedCount],["🔥 Streak",streak?`${streak}d`:"—"]].map(([l,v])=>(
             <div key={l} style={{background:"#f5f5f7",borderRadius:10,padding:".75rem"}}>
               <div style={{fontSize:11,color:"#888",marginBottom:3}}>{l}</div>
               <div style={{fontSize:17,fontWeight:700}}>{v}</div>
@@ -476,170 +517,194 @@ function App() {
           ))}
         </div>
 
-        {next&&(
-          <div style={{...s.card,marginBottom:"1.25rem"}}>
-            const completedCount=gd.books.filter(b=>b.completed).length;
-        <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:8}}>
-              <span style={{color:"#888"}}>Next: <span style={{color:"#1a1a1a",fontWeight:600}}>{next.reward}</span></span>
-              <span style={{color:"#888"}}>{completedCount}/{next.books} books</span>
+        {/* Next milestone */}
+        {nextMilestone && (
+          <div style={{...S.card,marginBottom:"1.25rem"}}>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:8}}>
+              <span style={{color:"#888"}}>Next reward: <span style={{color:"#1a1a1a",fontWeight:600}}>{nextMilestone.reward}</span></span>
+              <span style={{color:"#888"}}>{completedCount}/{nextMilestone.books} books</span>
             </div>
             <div style={{height:8,background:"#f0f0f0",borderRadius:4,overflow:"hidden"}}>
-              <div style={{height:"100%",width:`${progress}%`,background:girl.color,borderRadius:4,transition:"width .4s"}}/>
+              <div style={{height:"100%",width:`${progress}%`,background:prof.color,borderRadius:4,transition:"width .4s"}}/>
             </div>
           </div>
         )}
 
-
-
+        {/* Books header */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
           <span style={{fontWeight:700,fontSize:16}}>My books</span>
-          <button onClick={()=>setAddBook(true)} style={{background:girl.light,color:girl.color,border:"none",borderRadius:20,padding:"6px 16px",fontWeight:600,fontSize:13,cursor:"pointer"}}>+ Add book</button>
+          <button onClick={()=>setShowAddBook(true)} style={{background:prof.light,color:prof.color,border:"none",borderRadius:20,padding:"6px 16px",fontWeight:600,fontSize:13,cursor:"pointer"}}>+ Add book</button>
         </div>
 
-        {gd.books.length===0&&<p style={{color:"#888",fontSize:14,textAlign:"center",padding:"2rem 0"}}>No books yet — add your first one!</p>}
-        {gd.books.map(book=>{
-          const pct = book.chapters>0 ? Math.min(100,Math.round((book.chapterOn/book.chapters)*100)) : 0;
-          const bookTimerKey = `${girl.id}_${book.id}`;
-          const bookRunning = timerActive[bookTimerKey];
-          const bookSecs = elapsed[bookTimerKey]||0;
+        {pd.books.length === 0 && <p style={{color:"#888",fontSize:14,textAlign:"center",padding:"2rem 0"}}>No books yet — add your first one!</p>}
+
+        {/* Book cards */}
+        {pd.books.map(book => {
+          const timerKey  = `${prof.id}_${book.id}`;
+          const isRunning = timerActive[timerKey];
+          const secs      = elapsed[timerKey] || 0;
+          const pct       = book.chapters > 0 ? Math.min(100, Math.round((book.chapterOn / book.chapters) * 100)) : 0;
+
           return (
-          <div key={book.id} style={{...s.card}}>
-            <div style={{display:"flex",gap:12}}>
-              {book.cover&&<img src={book.cover} alt={book.title} style={{width:52,borderRadius:6,objectFit:"cover",alignSelf:"flex-start",flexShrink:0}}/>}
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                  <div style={{fontWeight:600,fontSize:15}}>{book.title}</div>
-                  {book.completed
-                    ? <span style={{fontSize:11,background:"#E1F5EE",color:"#1D9E75",padding:"2px 8px",borderRadius:8,fontWeight:600,flexShrink:0}}>✓ Done</span>
-                    : <span style={{fontSize:11,background:"#FFF8E1",color:"#B8860B",padding:"2px 8px",borderRadius:8,fontWeight:600,flexShrink:0}}>Reading...</span>
-                  }
-                </div>
-                {book.author&&<div style={{fontSize:13,color:"#888"}}>{book.author}</div>}
-                <div style={{fontSize:12,color:"#aaa",margin:"3px 0"}}>
-                  Added {book.dateAdded}
-                  {book.completed&&book.dateCompleted&&` · Finished ${book.dateCompleted}`}
-                </div>
-                {book.pages>0&&(
-                  <div style={{margin:"6px 0"}}>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#888",marginBottom:4}}>
-                      <span>Ch. {book.chapterOn||1}{book.chapters?` of ${book.chapters}`:""} · {book.pagesRead} of {book.pages} pages</span>
-                      <span>{pct}%</span>
+            <div key={book.id} style={S.card}>
+              {/* Book info row */}
+              <div style={{display:"flex",gap:12}}>
+                {book.cover && <img src={book.cover} alt={book.title} style={{width:52,borderRadius:6,objectFit:"cover",alignSelf:"flex-start",flexShrink:0}}/>}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                    <div style={{fontWeight:600,fontSize:15}}>{book.title}</div>
+                    {book.completed
+                      ? <span style={S.pill("#E1F5EE","#1D9E75")}>✓ Done</span>
+                      : <span style={S.pill("#FFF8E1","#B8860B")}>Reading…</span>}
+                  </div>
+                  {book.author && <div style={{fontSize:13,color:"#888"}}>{book.author}</div>}
+                  <div style={{fontSize:12,color:"#aaa",margin:"3px 0"}}>
+                    Added {book.dateAdded}
+                    {book.completed && book.dateCompleted && ` · Finished ${book.dateCompleted}`}
+                  </div>
+                  {book.chapters > 0 && (
+                    <div style={{margin:"6px 0"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#888",marginBottom:4}}>
+                        <span>Ch. {book.chapterOn} of {book.chapters}{book.pages>0?` · pg ${book.pagesRead}/${book.pages}`:""}</span>
+                        <span>{pct}%</span>
+                      </div>
+                      <div style={{height:6,background:"#f0f0f0",borderRadius:3,overflow:"hidden"}}>
+                        <div style={{height:"100%",width:`${pct}%`,background:book.completed?"#1D9E75":prof.color,borderRadius:3,transition:"width .3s"}}/>
+                      </div>
                     </div>
-                    <div style={{height:6,background:"#f0f0f0",borderRadius:3,overflow:"hidden"}}>
-                      <div style={{height:"100%",width:`${pct}%`,background:book.completed?"#1D9E75":girl.color,borderRadius:3,transition:"width .3s"}}/>
-                    </div>
+                  )}
+                  {book.note && <div style={{fontSize:13,color:"#888",fontStyle:"italic",marginTop:3}}>"{book.note}"</div>}
+                </div>
+              </div>
+
+              {/* Per-book timer */}
+              <div style={{marginTop:12,paddingTop:12,borderTop:"1px solid #f0f0f0"}}>
+                {isRunning && (
+                  <div style={{fontSize:32,fontWeight:700,textAlign:"center",color:prof.color,marginBottom:8,fontVariantNumeric:"tabular-nums"}}>
+                    {fmtTime(secs)}
                   </div>
                 )}
-                {book.note&&<div style={{fontSize:13,color:"#888",fontStyle:"italic",marginTop:3}}>"{book.note}"</div>}
+                <button onClick={()=>isRunning?stopTimer(timerKey):startTimer(timerKey)}
+                  style={{...(isRunning?S.solid(prof.color):S.btn(prof.color)),fontSize:13,padding:"9px"}}>
+                  {isRunning ? "⏹ Stop reading" : "▶ Start reading this book"}
+                </button>
+                {isRunning && <p style={{fontSize:11,color:"#888",textAlign:"center",marginTop:4}}>1 min reading = 1 min screen time</p>}
+              </div>
+
+              {/* Actions */}
+              <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}>
+                {!book.completed && (
+                  <UpdateProgress book={book} gid={prof.id} color={prof.color} onUpdate={updateProgress}/>
+                )}
+                {book.timerLogged && (
+                  <button onClick={()=>startQuiz(book,prof)} style={{background:"#f5f5f7",border:"1px solid #e0e0e0",borderRadius:20,padding:"4px 12px",fontSize:12,color:"#666",cursor:"pointer"}}>
+                    🧠 Comprehension quiz
+                  </button>
+                )}
               </div>
             </div>
-
-            {/* Per-book timer */}
-            <div style={{marginTop:12,paddingTop:12,borderTop:"1px solid #f0f0f0"}}>
-              {bookRunning&&<div style={{fontSize:28,fontWeight:700,textAlign:"center",color:girl.color,marginBottom:8}}>{fmtTime(bookSecs)}</div>}
-              <button onClick={()=>bookRunning?stopTimer(bookTimerKey):startTimer(bookTimerKey)}
-                style={{...(bookRunning?s.solid(girl.color):s.btn(girl.color)),fontSize:13,padding:"8px"}}>
-                {bookRunning?"⏹ Stop reading":"▶ Start reading this book"}
-              </button>
-              {bookRunning&&<p style={{fontSize:11,color:"#888",textAlign:"center",marginTop:4}}>1 min reading = 1 min screen time</p>}
-            </div>
-
-            {/* Actions */}
-            <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}>
-              {!book.completed&&book.pages>0&&(
-                <UpdateProgress book={book} gid={girl.id} color={girl.color} onUpdate={updateProgress}/>
-              )}
-              {(book.timerLogged||(gd.timerLog&&gd.timerLog.length>0))&&(
-                <button onClick={()=>startQuiz(book,girl)} style={{background:"#f5f5f7",border:"1px solid #e0e0e0",borderRadius:20,padding:"4px 12px",fontSize:12,color:"#666",cursor:"pointer"}}>
-                  🧠 Comprehension quiz
-                </button>
-              )}
-            </div>
-          </div>
           );
         })}
 
-        {addBook&&(
+        {/* ADD BOOK MODAL */}
+        {showAddBook && (
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",zIndex:200}}>
-            <div style={{background:"#fff",borderRadius:"20px 20px 0 0",padding:"1.5rem",width:"100%",maxHeight:"90vh",overflowY:"auto"}}>
+            <div style={{background:"#fff",borderRadius:"20px 20px 0 0",padding:"1.5rem",width:"100%",maxHeight:"92vh",overflowY:"auto"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
                 <h3 style={{fontSize:18,fontWeight:700}}>Add a book</h3>
-                <button onClick={()=>{setAddBook(false);setCoverResults([]);setCoverSearched(false);}} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#888"}}>✕</button>
+                <button onClick={()=>{setShowAddBook(false);setCoverResults([]);setCoverSearched(false);}} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#888"}}>✕</button>
               </div>
-              <label style={s.label}>Title</label>
+              <label style={S.lbl}>Title</label>
               <div style={{display:"flex",gap:8,marginBottom:12}}>
-                <input value={newBook.title} onChange={e=>setNewBook(p=>({...p,title:e.target.value}))} placeholder="Book title" style={{...s.input,flex:1}}/>
-                <button onClick={()=>searchCovers(newBook.title)} style={{padding:"10px 14px",borderRadius:10,border:`1.5px solid ${girl.color}`,background:"transparent",color:girl.color,fontWeight:600,fontSize:13,cursor:"pointer",whiteSpace:"nowrap"}}>Find cover</button>
+                <input value={newBook.title} onChange={e=>setNewBook(p=>({...p,title:e.target.value}))} placeholder="Book title" style={{...S.input,flex:1}}/>
+                <button onClick={()=>searchCovers(newBook.title)} style={{padding:"10px 14px",borderRadius:10,border:`1.5px solid ${prof.color}`,background:"transparent",color:prof.color,fontWeight:600,fontSize:13,cursor:"pointer",whiteSpace:"nowrap"}}>Find cover</button>
               </div>
-              {coverSearched&&(
+              {coverSearched && (
                 <div style={{marginBottom:14}}>
-                  {coverLoading&&<p style={{fontSize:13,color:"#888"}}>Searching...</p>}
-                  {!coverLoading&&coverResults.length===0&&<p style={{fontSize:13,color:"#888"}}>No covers found.</p>}
+                  {coverLoading && <p style={{fontSize:13,color:"#888"}}>Searching...</p>}
+                  {!coverLoading && coverResults.length===0 && <p style={{fontSize:13,color:"#888"}}>No covers found.</p>}
                   <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                     {coverResults.map(c=>(
                       <div key={c.id} onClick={()=>setNewBook(p=>({...p,cover:c.url,title:p.title||c.title,author:p.author||c.author}))}
-                        style={{cursor:"pointer",border:`2.5px solid ${newBook.cover===c.url?girl.color:"transparent"}`,borderRadius:6,overflow:"hidden"}}>
+                        style={{cursor:"pointer",border:`2.5px solid ${newBook.cover===c.url?prof.color:"transparent"}`,borderRadius:6,overflow:"hidden"}}>
                         <img src={c.url} alt={c.title} style={{width:56,height:76,objectFit:"cover",display:"block"}}/>
                       </div>
                     ))}
                   </div>
-                  {newBook.cover&&<p style={{fontSize:12,color:girl.color,marginTop:6}}>✓ Cover selected</p>}
+                  {newBook.cover && <p style={{fontSize:12,color:prof.color,marginTop:6}}>✓ Cover selected</p>}
                 </div>
               )}
-              {[["Author","author","Author name","text"],["Total pages","pages","e.g. 240","number"],["Pages read so far","pagesRead","e.g. 30","number"],["Total chapters","chapters","e.g. 20","number"],["Currently on chapter","chapterOn","e.g. 1","number"]].map(([l,k,ph,t])=>(
+              {[["Author","author","Author name","text"],["Total pages","pages","e.g. 320","number"],["Pages read so far","pagesRead","e.g. 0","number"],["Total chapters","chapters","e.g. 18","number"],["Currently on chapter","chapterOn","e.g. 1","number"]].map(([l,k,ph,t])=>(
                 <div key={k} style={{marginBottom:12}}>
-                  <label style={s.label}>{l}</label>
-                  <input type={t} value={newBook[k]} onChange={e=>setNewBook(p=>({...p,[k]:e.target.value}))} placeholder={ph} style={s.input}/>
+                  <label style={S.lbl}>{l}</label>
+                  <input type={t} value={newBook[k]} onChange={e=>setNewBook(p=>({...p,[k]:e.target.value}))} placeholder={ph} style={S.input}/>
                 </div>
               ))}
               <div style={{marginBottom:12}}>
-                <label style={s.label}>Rating</label>
-                <div style={{display:"flex",gap:8}}>{[1,2,3,4,5].map(n=><span key={n} onClick={()=>setNewBook(p=>({...p,rating:n}))} style={{fontSize:28,cursor:"pointer",color:n<=newBook.rating?girl.color:"#ddd"}}>★</span>)}</div>
+                <label style={S.lbl}>Rating</label>
+                <div style={{display:"flex",gap:8}}>{[1,2,3,4,5].map(n=>(
+                  <span key={n} onClick={()=>setNewBook(p=>({...p,rating:n}))} style={{fontSize:28,cursor:"pointer",color:n<=newBook.rating?prof.color:"#ddd"}}>★</span>
+                ))}</div>
               </div>
               <div style={{marginBottom:16}}>
-                <label style={s.label}>Note (optional)</label>
-                <textarea value={newBook.note} onChange={e=>setNewBook(p=>({...p,note:e.target.value}))} placeholder="What did you think?" rows={2} style={{...s.input,resize:"none"}}/>
+                <label style={S.lbl}>Note (optional)</label>
+                <textarea value={newBook.note} onChange={e=>setNewBook(p=>({...p,note:e.target.value}))} placeholder="What do you think so far?" rows={2} style={{...S.input,resize:"none"}}/>
               </div>
               <div style={{display:"flex",gap:10}}>
-                <button onClick={()=>{setAddBook(false);setCoverResults([]);setCoverSearched(false);}} style={{...s.btn("#888"),flex:1}}>Cancel</button>
-                <button onClick={()=>doAddBook(girl.id)} style={{...s.solid(girl.color),flex:1}}>Save book</button>
+                <button onClick={()=>{setShowAddBook(false);setCoverResults([]);setCoverSearched(false);}} style={{...S.btn("#888"),flex:1}}>Cancel</button>
+                <button onClick={()=>doAddBook(prof.id)} style={{...S.solid(prof.color),flex:1}}>Save book</button>
               </div>
             </div>
           </div>
         )}
 
-        {quizModal&&(
+        {/* QUIZ MODAL */}
+        {quizModal && (
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",zIndex:200}}>
-            <div style={{background:"#fff",borderRadius:"20px 20px 0 0",padding:"1.5rem",width:"100%",maxHeight:"90vh",overflowY:"auto"}}>
+            <div style={{background:"#fff",borderRadius:"20px 20px 0 0",padding:"1.5rem",width:"100%",maxHeight:"92vh",overflowY:"auto"}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:"1rem"}}>
                 <h3 style={{fontSize:16,fontWeight:700}}>{quizModal.book.title}</h3>
                 <button onClick={()=>{setQuizModal(null);setQuizData(null);}} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#888"}}>✕</button>
               </div>
-              <p style={{fontSize:13,color:"#888",marginBottom:"1rem"}}>Answer 3 questions to verify your reading.</p>
-              {quizLoading&&<p style={{textAlign:"center",color:"#888",padding:"2rem 0"}}>Generating quiz...</p>}
-              {quizData?.error&&<p style={{color:"#E24B4A"}}>Couldn't load quiz. Check your connection.</p>}
-              {quizData&&!quizData.error&&quizData.questions.map((q,qi)=>(
+              <p style={{fontSize:13,color:"#888",marginBottom:"1rem"}}>
+                {quizModal.book.chapters ? `Quiz covers up to Chapter ${quizModal.book.chapterOn}.` : "Answer 3 questions to verify your reading."}
+              </p>
+              {quizLoading && <p style={{textAlign:"center",color:"#888",padding:"2rem 0"}}>Generating quiz…</p>}
+              {quizData?.error && <p style={{color:"#E24B4A"}}>Couldn't load quiz. Check your connection.</p>}
+              {quizData && !quizData.error && quizData.questions.map((q,qi)=>(
                 <div key={qi} style={{marginBottom:"1.25rem"}}>
                   <p style={{fontWeight:600,fontSize:14,marginBottom:8}}>{qi+1}. {q.q}</p>
                   {q.options.map((opt,oi)=>{
-                    const sel=quizAns[qi]===oi,cor=quizDone&&oi===q.answer,wrong=quizDone&&sel&&oi!==q.answer;
-                    return <div key={oi} onClick={()=>!quizDone&&setQuizAns(p=>{const n=[...p];n[qi]=oi;return n;})}
-                      style={{padding:"10px 14px",borderRadius:10,marginBottom:6,fontSize:14,cursor:quizDone?"default":"pointer",
-                        border:`1.5px solid ${cor?"#1D9E75":wrong?"#E24B4A":sel?girl.color:"#e0e0e0"}`,
-                        background:cor?"#E1F5EE":wrong?"#FFEBEE":sel?girl.light:"transparent"}}>{opt}</div>;
+                    const sel=quizAns[qi]===oi, cor=quizDone&&oi===q.answer, wrong=quizDone&&sel&&oi!==q.answer;
+                    return (
+                      <div key={oi} onClick={()=>!quizDone&&setQuizAns(p=>{const n=[...p];n[qi]=oi;return n;})}
+                        style={{padding:"10px 14px",borderRadius:10,marginBottom:6,fontSize:14,cursor:quizDone?"default":"pointer",
+                          border:`1.5px solid ${cor?"#1D9E75":wrong?"#E24B4A":sel?prof.color:"#e0e0e0"}`,
+                          background:cor?"#E1F5EE":wrong?"#FFEBEE":sel?prof.light:"transparent"}}>
+                        {opt}
+                      </div>
+                    );
                   })}
                 </div>
               ))}
-              {quizDone&&quizData&&!quizData.error&&(()=>{
-                const c=quizData.questions.filter((q,i)=>quizAns[i]===q.answer).length;
-                return <div style={{background:c>=2?girl.light:"#f5f5f7",borderRadius:10,padding:"12px 16px",marginBottom:14,textAlign:"center"}}>
-                  <div style={{fontWeight:700,fontSize:15,color:c>=2?girl.color:"#888"}}>{c}/3 correct — {c>=2?"Reading verified ✓":"Keep reading and try again!"}</div>
-                </div>;
+              {quizDone && quizData && !quizData.error && (()=>{
+                const correct = quizData.questions.filter((q,i)=>quizAns[i]===q.answer).length;
+                return (
+                  <div style={{background:correct>=2?prof.light:"#f5f5f7",borderRadius:10,padding:"12px 16px",marginBottom:14,textAlign:"center"}}>
+                    <div style={{fontWeight:700,fontSize:15,color:correct>=2?prof.color:"#888"}}>
+                      {correct}/3 correct — {correct>=2?"Reading verified ✓":"Keep reading and try again!"}
+                    </div>
+                  </div>
+                );
               })()}
               <div style={{display:"flex",gap:10}}>
-                <button onClick={()=>{setQuizModal(null);setQuizData(null);}} style={{...s.btn("#888"),flex:1}}>Close</button>
-                {quizData&&!quizData.error&&!quizDone&&<button onClick={()=>setQuizDone(true)} disabled={quizAns.filter(a=>a!==undefined).length<3}
-                  style={{...s.solid(girl.color),flex:1,opacity:quizAns.filter(a=>a!==undefined).length<3?0.4:1}}>Submit</button>}
+                <button onClick={()=>{setQuizModal(null);setQuizData(null);}} style={{...S.btn("#888"),flex:1}}>Close</button>
+                {quizData && !quizData.error && !quizDone && (
+                  <button onClick={()=>setQuizDone(true)} disabled={quizAns.filter(a=>a!==undefined).length<3}
+                    style={{...S.solid(prof.color),flex:1,opacity:quizAns.filter(a=>a!==undefined).length<3?0.4:1}}>
+                    Submit
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -648,20 +713,22 @@ function App() {
     );
   }
 
-  // ── PARENT ───────────────────────────────────────────
-  if (screen==="parent") {
+  // ════════════════════════════════════════════════════
+  // PARENT DASHBOARD
+  // ════════════════════════════════════════════════════
+  if (screen === "parent") {
     if (!parentUnlocked) return (
       <div style={{maxWidth:360,margin:"0 auto",padding:"3rem 1.5rem"}}>
         <button onClick={()=>setScreen("home")} style={{background:"none",border:"none",color:"#888",fontSize:15,cursor:"pointer",marginBottom:"1.5rem",padding:0}}>← Back</button>
         <div style={{fontSize:32,marginBottom:8}}>🔒</div>
         <h2 style={{fontSize:22,fontWeight:700,marginBottom:6}}>Parent dashboard</h2>
         <p style={{color:"#888",fontSize:14,marginBottom:"1.5rem"}}>Enter your PIN to continue.</p>
-        <input type="password" inputMode="numeric" maxLength={6} value={pinInput}
-          onChange={e=>{setPinInput(e.target.value.replace(/\D/g,""));setPinError("");}}
-          onKeyDown={e=>{if(e.key==="Enter"){if(pinInput===parentPin){setParentUnlocked(true);setPinInput("");setPinError("");}else{setPinError("Incorrect PIN");setPinInput("");}}}}
-          placeholder="••••" autoFocus style={{...s.input,fontSize:28,textAlign:"center",letterSpacing:8,marginBottom:10}}/>
-        {pinError&&<p style={{color:"#E24B4A",fontSize:13,marginBottom:10}}>{pinError}</p>}
-        <button onClick={()=>{if(pinInput===parentPin){setParentUnlocked(true);setPinInput("");setPinError("");}else{setPinError("Incorrect PIN");setPinInput("");}}} style={s.solid("#534AB7")}>Unlock</button>
+        <input type="password" inputMode="numeric" maxLength={6} value={pinInput} autoFocus
+          onChange={e=>{setPinInput(e.target.value.replace(/\D/g,"")); setPinError("");}}
+          onKeyDown={e=>{if(e.key==="Enter"){if(pinInput===parentPin){setParentUnlocked(true);setPinInput("");setPinError("");}else{setPinError("Incorrect PIN");setPinInput("");}  }}}
+          placeholder="••••" style={{...S.input,fontSize:28,textAlign:"center",letterSpacing:8,marginBottom:10}}/>
+        {pinError && <p style={{color:"#E24B4A",fontSize:13,marginBottom:10}}>{pinError}</p>}
+        <button onClick={()=>{if(pinInput===parentPin){setParentUnlocked(true);setPinInput("");setPinError("");}else{setPinError("Incorrect PIN");setPinInput("");}}} style={S.solid("#534AB7")}>Unlock</button>
       </div>
     );
 
@@ -671,6 +738,8 @@ function App() {
           <button onClick={()=>{setScreen("home");setParentUnlocked(false);}} style={{background:"none",border:"none",color:"#888",fontSize:22,cursor:"pointer",padding:0}}>←</button>
           <h2 style={{fontSize:18,fontWeight:700}}>Parent dashboard</h2>
         </div>
+
+        {/* Tabs */}
         <div style={{display:"flex",gap:4,background:"#f0f0f0",borderRadius:12,padding:4,marginBottom:"1.25rem"}}>
           {["overview","rewards","history","settings"].map(t=>(
             <button key={t} onClick={()=>setParentTab(t)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"none",background:parentTab===t?"#fff":"transparent",fontWeight:parentTab===t?700:400,fontSize:13,cursor:"pointer",color:parentTab===t?"#1a1a1a":"#888"}}>
@@ -679,124 +748,163 @@ function App() {
           ))}
         </div>
 
-        {parentTab==="overview"&&girls.map(g=>{
-          const d=data[g.id]||{};
-          const ms=getMilestones(g.age,rewards);
-          const nxt=ms.find(m=>(d.books||[]).length<m.books&&!(d.claimedMilestones||[]).includes(m.books));
-          return <div key={g.id} style={s.card}>
-            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-              <div style={{width:40,height:40,borderRadius:"50%",background:g.light,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,color:g.color}}>{g.avatar}</div>
-              <div>
-                <div style={{fontWeight:700}}>{g.name} <span style={{color:"#888",fontSize:13,fontWeight:400}}>age {g.age}</span></div>
-                <div style={{fontSize:13,color:"#888"}}>{(d.books||[]).length} books · {d.screenMinutes||0} min banked · {getStreak(d.books||[])} day streak</div>
+        {/* OVERVIEW */}
+        {parentTab==="overview" && profiles.map(p => {
+          const d = pData[p.id]||{};
+          const completedCount = (d.books||[]).filter(b=>b.completed).length;
+          const ms = getMilestones(p.age, rewards);
+          const nxt = ms.find(m => completedCount < m.books && !(d.claimedMilestones||[]).includes(m.books));
+          return (
+            <div key={p.id} style={S.card}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                <div style={{width:40,height:40,borderRadius:"50%",background:p.light,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,color:p.color}}>{p.avatar}</div>
+                <div>
+                  <div style={{fontWeight:700}}>{p.name} {p.age<18&&<span style={{color:"#888",fontSize:13,fontWeight:400}}>age {p.age}</span>}</div>
+                  <div style={{fontSize:13,color:"#888"}}>{completedCount} books · {d.screenMinutes||0} min banked · {getStreak(d.books||[])} day streak</div>
+                </div>
               </div>
+              {(d.pendingRewards||[]).map(r=>(
+                <div key={r.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"#f9f9f9",borderRadius:8,padding:"8px 12px",marginBottom:6}}>
+                  <span style={{fontSize:13}}>🎁 {r.reward} <span style={{color:"#888",fontSize:12}}>({r.milestone} books)</span></span>
+                  <button onClick={()=>approveReward(p.id,r.id)} style={{background:p.light,color:p.color,border:"none",borderRadius:20,padding:"4px 12px",cursor:"pointer",fontSize:13,fontWeight:600}}>Approve</button>
+                </div>
+              ))}
+              {nxt && <div style={{fontSize:13,color:"#888",marginTop:6}}>Next: {nxt.books} books → {nxt.reward} ({nxt.books-completedCount} to go)</div>}
+              <button onClick={()=>{setSpendModal(p);setSpendAmt(30);}} style={{marginTop:10,background:"#f5f5f7",border:"1px solid #e0e0e0",borderRadius:20,padding:"5px 14px",fontSize:13,color:"#666",cursor:"pointer"}}>Deduct screen time</button>
             </div>
-            {(d.pendingRewards||[]).map(r=>(
-              <div key={r.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"#f9f9f9",borderRadius:8,padding:"8px 12px",marginBottom:6}}>
-                <span style={{fontSize:13}}>🎁 {r.reward} <span style={{color:"#888",fontSize:12}}>({r.milestone} books)</span></span>
-                <button onClick={()=>approveReward(g.id,r.id)} style={{background:g.light,color:g.color,border:"none",borderRadius:20,padding:"4px 12px",cursor:"pointer",fontSize:13,fontWeight:600}}>Approve</button>
+          );
+        })}
+
+        {/* REWARDS */}
+        {parentTab==="rewards" && (
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <p style={{fontSize:14,color:"#888"}}>Rewards earned at age-scaled milestones.</p>
+              <button onClick={()=>{setRewardDraft([...rewards]);setEditRewards(true);}} style={{background:"none",border:"1px solid #e0e0e0",borderRadius:20,padding:"5px 14px",fontSize:13,cursor:"pointer"}}>Edit</button>
+            </div>
+            {rewards.map((r,i)=>(
+              <div key={i} style={{...S.card,display:"flex",alignItems:"center",gap:10,padding:".875rem 1.25rem"}}>
+                <span>🎁</span><span style={{fontSize:14}}>{r}</span>
               </div>
             ))}
-            {nxt&&<div style={{fontSize:13,color:"#888",marginTop:6}}>Next: {nxt.books} books → {nxt.reward} ({nxt.books-(d.books||[]).length} to go)</div>}
-            <button onClick={()=>{setSpendModal(g);setSpendAmt(30);}} style={{marginTop:10,background:"#f5f5f7",border:"1px solid #e0e0e0",borderRadius:20,padding:"5px 14px",fontSize:13,color:"#666",cursor:"pointer"}}>Deduct screen time</button>
-          </div>;
+            {editRewards && (
+              <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",zIndex:200}}>
+                <div style={{background:"#fff",borderRadius:"20px 20px 0 0",padding:"1.5rem",width:"100%",maxHeight:"80vh",overflowY:"auto"}}>
+                  <h3 style={{fontSize:18,fontWeight:700,marginBottom:"1rem"}}>Edit rewards</h3>
+                  {rewardDraft.map((r,i)=>(
+                    <div key={i} style={{display:"flex",gap:8,marginBottom:8}}>
+                      <input value={r} onChange={e=>{const d=[...rewardDraft];d[i]=e.target.value;setRewardDraft(d);}} style={{...S.input,flex:1}}/>
+                      <button onClick={()=>setRewardDraft(rewardDraft.filter((_,j)=>j!==i))} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#888"}}>✕</button>
+                    </div>
+                  ))}
+                  <button onClick={()=>setRewardDraft([...rewardDraft,"New reward"])} style={{fontSize:13,padding:"6px 14px",borderRadius:20,border:"1px solid #e0e0e0",background:"transparent",cursor:"pointer",marginBottom:16}}>+ Add reward</button>
+                  <div style={{display:"flex",gap:10}}>
+                    <button onClick={()=>setEditRewards(false)} style={{...S.btn("#888"),flex:1}}>Cancel</button>
+                    <button onClick={()=>{setRewards(rewardDraft);setEditRewards(false);}} style={{...S.solid("#534AB7"),flex:1}}>Save</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* HISTORY */}
+        {parentTab==="history" && profiles.map(p => {
+          const d = pData[p.id]||{};
+          const all = [
+            ...(d.timerLog||[]).map(t=>({...t,type:"deposit"})),
+            ...(d.withdrawalLog||[]).map(t=>({...t,type:"withdraw"})),
+          ].slice(0,20);
+          return (
+            <div key={p.id} style={{marginBottom:"1.5rem"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                <div style={{width:30,height:30,borderRadius:"50%",background:p.light,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,color:p.color}}>{p.avatar}</div>
+                <span style={{fontWeight:700}}>{p.name}</span>
+              </div>
+              {all.length===0 && <p style={{fontSize:13,color:"#888",paddingLeft:38}}>No history yet.</p>}
+              {all.map((e,i)=>(
+                <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"8px 12px 8px 38px",borderBottom:"1px solid #f0f0f0",fontSize:13}}>
+                  <span style={{color:"#888"}}>{e.type==="deposit"?"📚 Reading":"📱 Screen time"} · {e.date} {e.time}</span>
+                  <span style={{fontWeight:700,color:e.type==="deposit"?"#1D9E75":"#E24B4A"}}>{e.type==="deposit"?"+":"-"}{e.mins} min</span>
+                </div>
+              ))}
+            </div>
+          );
         })}
 
-        {parentTab==="rewards"&&<div>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-            <p style={{fontSize:14,color:"#888"}}>Rewards are earned at age-scaled milestones.</p>
-            <button onClick={()=>{setRewardDraft([...rewards]);setEditRewards(true);}} style={{background:"none",border:"1px solid #e0e0e0",borderRadius:20,padding:"5px 14px",fontSize:13,cursor:"pointer"}}>Edit</button>
+        {/* SETTINGS */}
+        {parentTab==="settings" && (
+          <div>
+            <p style={{fontWeight:700,fontSize:15,marginBottom:12}}>Profiles</p>
+            {profiles.map(p=>(
+              <div key={p.id} style={{...S.card,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  <div style={{width:38,height:38,borderRadius:"50%",background:p.light,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,color:p.color}}>{p.avatar}</div>
+                  <div><div style={{fontWeight:600}}>{p.name}</div><div style={{fontSize:13,color:"#888"}}>Age {p.age}</div></div>
+                </div>
+                <button onClick={()=>setEditProfile({...p})} style={{background:"none",border:"1px solid #e0e0e0",borderRadius:20,padding:"5px 14px",fontSize:13,cursor:"pointer"}}>Edit</button>
+              </div>
+            ))}
+
+            <p style={{fontWeight:700,fontSize:15,margin:"1.25rem 0 12px"}}>Parent PIN</p>
+            {!changingPPin
+              ? <div style={{...S.card,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:14,color:"#888"}}>PIN: {"•".repeat(parentPin.length)}</span>
+                  <button onClick={()=>{setNewPPin("");setChangingPPin(true);}} style={{background:"none",border:"1px solid #e0e0e0",borderRadius:20,padding:"5px 14px",fontSize:13,cursor:"pointer"}}>Change</button>
+                </div>
+              : <div style={S.card}>
+                  <label style={S.lbl}>New PIN (min 4 digits)</label>
+                  <input type="password" inputMode="numeric" maxLength={6} value={newPPin} onChange={e=>setNewPPin(e.target.value.replace(/\D/g,""))}
+                    style={{...S.input,fontSize:24,textAlign:"center",letterSpacing:6,marginBottom:12}}/>
+                  <div style={{display:"flex",gap:10}}>
+                    <button onClick={()=>setChangingPPin(false)} style={{...S.btn("#888"),flex:1}}>Cancel</button>
+                    <button onClick={()=>{if(newPPin.length>=4){setParentPin(newPPin);setChangingPPin(false);}}} style={{...S.solid("#534AB7"),flex:1}}>Save PIN</button>
+                  </div>
+                </div>
+            }
           </div>
-          {rewards.map((r,i)=><div key={i} style={{...s.card,display:"flex",alignItems:"center",gap:10,padding:".875rem 1.25rem"}}><span>🎁</span><span style={{fontSize:14}}>{r}</span></div>)}
-          {editRewards&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",zIndex:200}}>
-            <div style={{background:"#fff",borderRadius:"20px 20px 0 0",padding:"1.5rem",width:"100%",maxHeight:"80vh",overflowY:"auto"}}>
-              <h3 style={{fontSize:18,fontWeight:700,marginBottom:"1rem"}}>Edit rewards</h3>
-              {rewardDraft.map((r,i)=><div key={i} style={{display:"flex",gap:8,marginBottom:8}}>
-                <input value={r} onChange={e=>{const d=[...rewardDraft];d[i]=e.target.value;setRewardDraft(d);}} style={{...s.input,flex:1}}/>
-                <button onClick={()=>setRewardDraft(rewardDraft.filter((_,j)=>j!==i))} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#888"}}>✕</button>
-              </div>)}
-              <button onClick={()=>setRewardDraft([...rewardDraft,"New reward"])} style={{fontSize:13,padding:"6px 14px",borderRadius:20,border:"1px solid #e0e0e0",background:"transparent",cursor:"pointer",marginBottom:16}}>+ Add reward</button>
+        )}
+
+        {/* EDIT PROFILE MODAL */}
+        {editProfile && (
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",zIndex:200}}>
+            <div style={{background:"#fff",borderRadius:"20px 20px 0 0",padding:"1.5rem",width:"100%"}}>
+              <h3 style={{fontSize:18,fontWeight:700,marginBottom:"1rem"}}>Edit {editProfile.name}</h3>
+              <label style={S.lbl}>Name</label>
+              <input value={editProfile.name} onChange={e=>setEditProfile(p=>({...p,name:e.target.value,avatar:e.target.value[0]?.toUpperCase()||p.avatar}))} style={{...S.input,marginBottom:12}}/>
+              <label style={S.lbl}>Age</label>
+              <input type="number" min={1} max={99} value={editProfile.age} onChange={e=>setEditProfile(p=>({...p,age:parseInt(e.target.value)||p.age}))} style={{...S.input,marginBottom:12}}/>
+              <label style={S.lbl}>Color</label>
+              <div style={{display:"flex",gap:10,marginBottom:16}}>
+                {COLOR_OPTIONS.map(c=>(
+                  <div key={c.color} onClick={()=>setEditProfile(p=>({...p,color:c.color,light:c.light}))}
+                    style={{width:36,height:36,borderRadius:"50%",background:c.color,cursor:"pointer",border:`3px solid ${editProfile.color===c.color?"#1a1a1a":"transparent"}`}}/>
+                ))}
+              </div>
               <div style={{display:"flex",gap:10}}>
-                <button onClick={()=>setEditRewards(false)} style={{...s.btn("#888"),flex:1}}>Cancel</button>
-                <button onClick={()=>{setRewards(rewardDraft);setEditRewards(false);}} style={{...s.solid("#534AB7"),flex:1}}>Save</button>
+                <button onClick={()=>setEditProfile(null)} style={{...S.btn("#888"),flex:1}}>Cancel</button>
+                <button onClick={()=>{setProfiles(p=>p.map(x=>x.id===editProfile.id?editProfile:x));setEditProfile(null);}} style={{...S.solid("#534AB7"),flex:1}}>Save</button>
               </div>
             </div>
-          </div>}
-        </div>}
+          </div>
+        )}
 
-        {parentTab==="history"&&girls.map(g=>{
-          const d=data[g.id]||{};
-          const all=[...(d.timerLog||[]).map(t=>({...t,type:"deposit"})),...(d.withdrawalLog||[]).map(t=>({...t,type:"withdraw"}))].slice(0,20);
-          return <div key={g.id} style={{marginBottom:"1.5rem"}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-              <div style={{width:30,height:30,borderRadius:"50%",background:g.light,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,color:g.color}}>{g.avatar}</div>
-              <span style={{fontWeight:700}}>{g.name}</span>
-            </div>
-            {all.length===0&&<p style={{fontSize:13,color:"#888",paddingLeft:38}}>No history yet.</p>}
-            {all.map((e,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"8px 12px 8px 38px",borderBottom:"1px solid #f0f0f0",fontSize:13}}>
-              <span style={{color:"#888"}}>{e.type==="deposit"?"📚":"📱"} {e.date} {e.time}</span>
-              <span style={{fontWeight:700,color:e.type==="deposit"?"#1D9E75":"#E24B4A"}}>{e.type==="deposit"?"+":"-"}{e.mins} min</span>
-            </div>)}
-          </div>;
-        })}
-
-        {parentTab==="settings"&&<div>
-          <p style={{fontWeight:700,fontSize:15,marginBottom:12}}>Profiles</p>
-          {girls.map(g=><div key={g.id} style={{...s.card,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <div style={{display:"flex",alignItems:"center",gap:10}}>
-              <div style={{width:38,height:38,borderRadius:"50%",background:g.light,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,color:g.color}}>{g.avatar}</div>
-              <div><div style={{fontWeight:600}}>{g.name}</div><div style={{fontSize:13,color:"#888"}}>Age {g.age}</div></div>
-            </div>
-            <button onClick={()=>setEditGirl({...g})} style={{background:"none",border:"1px solid #e0e0e0",borderRadius:20,padding:"5px 14px",fontSize:13,cursor:"pointer"}}>Edit</button>
-          </div>)}
-          <p style={{fontWeight:700,fontSize:15,margin:"1.25rem 0 12px"}}>Parent PIN</p>
-          {!changingPPin
-            ?<div style={{...s.card,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-               <span style={{fontSize:14,color:"#888"}}>PIN: {"•".repeat(parentPin.length)}</span>
-               <button onClick={()=>{setNewPPin("");setChangingPPin(true);}} style={{background:"none",border:"1px solid #e0e0e0",borderRadius:20,padding:"5px 14px",fontSize:13,cursor:"pointer"}}>Change</button>
-             </div>
-            :<div style={s.card}>
-               <label style={s.label}>New PIN (min 4 digits)</label>
-               <input type="password" inputMode="numeric" maxLength={6} value={newPPin} onChange={e=>setNewPPin(e.target.value.replace(/\D/g,""))} style={{...s.input,fontSize:24,textAlign:"center",letterSpacing:6,marginBottom:12}}/>
-               <div style={{display:"flex",gap:10}}>
-                 <button onClick={()=>setChangingPPin(false)} style={{...s.btn("#888"),flex:1}}>Cancel</button>
-                 <button onClick={()=>{if(newPPin.length>=4){setParentPin(newPPin);setChangingPPin(false);}}} style={{...s.solid("#534AB7"),flex:1}}>Save PIN</button>
-               </div>
-             </div>
-          }
-        </div>}
-
-        {editGirl&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",zIndex:200}}>
-          <div style={{background:"#fff",borderRadius:"20px 20px 0 0",padding:"1.5rem",width:"100%"}}>
-            <h3 style={{fontSize:18,fontWeight:700,marginBottom:"1rem"}}>Edit {editGirl.name}</h3>
-            <label style={s.label}>Name</label>
-            <input value={editGirl.name} onChange={e=>setEditGirl(p=>({...p,name:e.target.value,avatar:e.target.value[0]?.toUpperCase()||p.avatar}))} style={{...s.input,marginBottom:12}}/>
-            <label style={s.label}>Age</label>
-            <input type="number" min={5} max={18} value={editGirl.age} onChange={e=>setEditGirl(p=>({...p,age:parseInt(e.target.value)||p.age}))} style={{...s.input,marginBottom:12}}/>
-            <label style={s.label}>Color</label>
-            <div style={{display:"flex",gap:10,marginBottom:16}}>
-              {COLOR_OPTIONS.map(c=><div key={c.color} onClick={()=>setEditGirl(p=>({...p,color:c.color,light:c.light}))}
-                style={{width:36,height:36,borderRadius:"50%",background:c.color,cursor:"pointer",border:`3px solid ${editGirl.color===c.color?"#1a1a1a":"transparent"}`}}/>)}
-            </div>
-            <div style={{display:"flex",gap:10}}>
-              <button onClick={()=>setEditGirl(null)} style={{...s.btn("#888"),flex:1}}>Cancel</button>
-              <button onClick={()=>{setGirls(p=>p.map(g=>g.id===editGirl.id?editGirl:g));setEditGirl(null);}} style={{...s.solid("#534AB7"),flex:1}}>Save</button>
+        {/* SPEND MODAL */}
+        {spendModal && (
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",zIndex:200}}>
+            <div style={{background:"#fff",borderRadius:"20px 20px 0 0",padding:"1.5rem",width:"100%"}}>
+              <h3 style={{fontSize:18,fontWeight:700,marginBottom:4}}>Deduct screen time</h3>
+              <p style={{fontSize:13,color:"#888",marginBottom:"1rem"}}>{spendModal.name} has {pData[spendModal.id]?.screenMinutes||0} min banked.</p>
+              <label style={S.lbl}>Minutes to deduct</label>
+              <input type="number" min={1} value={spendAmt} onChange={e=>setSpendAmt(parseInt(e.target.value)||0)}
+                style={{...S.input,fontSize:24,textAlign:"center",marginBottom:16}}/>
+              <div style={{display:"flex",gap:10}}>
+                <button onClick={()=>setSpendModal(null)} style={{...S.btn("#888"),flex:1}}>Cancel</button>
+                <button onClick={()=>{doSpend(spendModal.id,spendAmt);setSpendModal(null);}} style={{...S.solid(spendModal.color),flex:1}}>Deduct</button>
+              </div>
             </div>
           </div>
-        </div>}
-
-        {spendModal&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",zIndex:200}}>
-          <div style={{background:"#fff",borderRadius:"20px 20px 0 0",padding:"1.5rem",width:"100%"}}>
-            <h3 style={{fontSize:18,fontWeight:700,marginBottom:4}}>Deduct screen time</h3>
-            <p style={{fontSize:13,color:"#888",marginBottom:"1rem"}}>{spendModal.name} has {data[spendModal.id]?.screenMinutes||0} min banked.</p>
-            <label style={s.label}>Minutes to deduct</label>
-            <input type="number" min={1} value={spendAmt} onChange={e=>setSpendAmt(parseInt(e.target.value)||0)} style={{...s.input,fontSize:24,textAlign:"center",marginBottom:16}}/>
-            <div style={{display:"flex",gap:10}}>
-              <button onClick={()=>setSpendModal(null)} style={{...s.btn("#888"),flex:1}}>Cancel</button>
-              <button onClick={()=>{doSpend(spendModal.id,spendAmt);setSpendModal(null);}} style={{...s.solid(spendModal.color),flex:1}}>Deduct</button>
-            </div>
-          </div>
-        </div>}
+        )}
       </div>
     );
   }
