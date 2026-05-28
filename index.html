@@ -232,8 +232,23 @@ function App() {
     const chapterOn = parseInt(newBook.chapterOn)||1;
     const completed = pages > 0 && pagesRead >= pages;
     const book = {...newBook, id:Date.now(), dateAdded:new Date().toLocaleDateString(), dateCompleted:completed?new Date().toLocaleDateString():null, pages, pagesRead, chapters, chapterOn, completed};
-    save(gid, d => ({...d, books:[book,...d.books]}));
-    if (completed) checkMilestones(gid, (data[gid].books?.length||0)+1);
+    setData(p => {
+      const updated = {...p, [gid]: {...p[gid], books:[book,...p[gid].books]}};
+      const completedCount = updated[gid].books.filter(b=>b.completed).length;
+      // only trigger milestone check if this book is already complete on add
+      if (completed) {
+        const girl = girls.find(g=>g.id===gid);
+        getMilestones(girl.age, rewards).forEach(m => {
+          if (completedCount >= m.books) {
+            const d = updated[gid];
+            if (!d.claimedMilestones.includes(m.books) && !d.pendingRewards.find(r=>r.milestone===m.books)) {
+              updated[gid] = {...updated[gid], pendingRewards:[...updated[gid].pendingRewards, {milestone:m.books, reward:m.reward, id:Date.now()}]};
+            }
+          }
+        });
+      }
+      return updated;
+    });
     setNewBook({title:"",author:"",pages:"",pagesRead:"",chapters:"",chapterOn:"1",rating:5,note:"",cover:""});
     setCoverResults([]); setCoverSearched(false); setAddBook(false);
   }
