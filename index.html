@@ -186,7 +186,13 @@ function App() {
   }, [timerActive, timerStart]);
 
   function save(gid, fn) { setData(p => ({...p, [gid]: fn(p[gid])})); }
-  function fmtTime(s) { return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`; }
+  function fmtTime(s) {
+    const h=Math.floor(s/3600);
+    const m=Math.floor((s%3600)/60);
+    const sec=s%60;
+    if(h>0) return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
+    return `${m}:${String(sec).padStart(2,"0")}`;
+  }
 
   function startTimer(timerKey) {
     setTimerActive(p=>({...p,[timerKey]:true}));
@@ -230,7 +236,7 @@ function App() {
     const pagesRead = parseInt(newBook.pagesRead)||0;
     const chapters = parseInt(newBook.chapters)||0;
     const chapterOn = parseInt(newBook.chapterOn)||1;
-    const completed = pages > 0 && pagesRead >= pages;
+    const completed = chapters > 0 && chapterOn >= chapters;
     const book = {...newBook, id:Date.now(), dateAdded:new Date().toLocaleDateString(), dateCompleted:completed?new Date().toLocaleDateString():null, pages, pagesRead, chapters, chapterOn, completed};
     setData(p => {
       const updated = {...p, [gid]: {...p[gid], books:[book,...p[gid].books]}};
@@ -257,7 +263,7 @@ function App() {
     setData(p => {
       const books = p[gid].books.map(b => {
         if (b.id !== bookId) return b;
-        const completed = b.pages > 0 && pagesRead >= b.pages;
+        const completed = b.chapters > 0 && chapterOn >= b.chapters;
         const justCompleted = completed && !b.completed;
         return {...b, pagesRead, chapterOn, completed, dateCompleted:justCompleted?new Date().toLocaleDateString():b.dateCompleted};
       });
@@ -472,9 +478,10 @@ function App() {
 
         {next&&(
           <div style={{...s.card,marginBottom:"1.25rem"}}>
-            <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:8}}>
+            const completedCount=gd.books.filter(b=>b.completed).length;
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:8}}>
               <span style={{color:"#888"}}>Next: <span style={{color:"#1a1a1a",fontWeight:600}}>{next.reward}</span></span>
-              <span style={{color:"#888"}}>{gd.books.length}/{next.books}</span>
+              <span style={{color:"#888"}}>{completedCount}/{next.books} books</span>
             </div>
             <div style={{height:8,background:"#f0f0f0",borderRadius:4,overflow:"hidden"}}>
               <div style={{height:"100%",width:`${progress}%`,background:girl.color,borderRadius:4,transition:"width .4s"}}/>
@@ -491,7 +498,7 @@ function App() {
 
         {gd.books.length===0&&<p style={{color:"#888",fontSize:14,textAlign:"center",padding:"2rem 0"}}>No books yet — add your first one!</p>}
         {gd.books.map(book=>{
-          const pct = book.pages>0 ? Math.min(100,Math.round((book.pagesRead/book.pages)*100)) : 0;
+          const pct = book.chapters>0 ? Math.min(100,Math.round((book.chapterOn/book.chapters)*100)) : 0;
           const bookTimerKey = `${girl.id}_${book.id}`;
           const bookRunning = timerActive[bookTimerKey];
           const bookSecs = elapsed[bookTimerKey]||0;
