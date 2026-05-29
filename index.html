@@ -737,8 +737,11 @@ function App() {
         {/* Books */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
           <span style={{fontWeight:700,fontSize:16}}>My books</span>
-          <button onClick={()=>{setNewBook(emptyBook);setCoverResults([]);setCoverSearched(false);setScanError("");setShowAddBook(true);}}
-            style={{background:prof.light,color:prof.color,border:"none",borderRadius:20,padding:"6px 16px",fontWeight:600,fontSize:13,cursor:"pointer"}}>+ Add book</button>
+          <button
+            onClick={()=>{setNewBook(emptyBook);setCoverResults([]);setCoverSearched(false);setScanError("");setShowAddBook(true);}}
+            style={{background:prof.light,color:prof.color,border:"none",borderRadius:20,padding:"8px 18px",fontWeight:600,fontSize:13,cursor:"pointer",WebkitTapHighlightColor:"transparent",touchAction:"manipulation"}}>
+            + Add book
+          </button>
         </div>
 
         {pd.books.length===0&&<p style={{color:"#888",fontSize:14,textAlign:"center",padding:"2rem 0"}}>No books yet — add your first one!</p>}
@@ -824,8 +827,10 @@ function App() {
 
         {/* ADD BOOK MODAL */}
         {showAddBook&&(
-          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",zIndex:200}}>
-            <div style={{background:"#fff",borderRadius:"20px 20px 0 0",padding:"1.5rem",width:"100%",maxHeight:"92vh",overflowY:"auto"}}>
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",zIndex:500,WebkitOverflowScrolling:"touch"}}
+            onClick={e=>{if(e.target===e.currentTarget){setShowAddBook(false);setShowScanner(false);setScanError("");}}}> 
+            <div style={{background:"#fff",borderRadius:"20px 20px 0 0",padding:"1.5rem",width:"100%",maxHeight:"92vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}
+              onClick={e=>e.stopPropagation()}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
                 <h3 style={{fontSize:18,fontWeight:700}}>Add a book</h3>
                 <button onClick={()=>{setShowAddBook(false);setShowScanner(false);setScanError("");}} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#888"}}>✕</button>
